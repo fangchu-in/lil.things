@@ -159,6 +159,7 @@ async function emailOrder(o) {
         _subject: `New order: ${o.quantity} x ${o.product} (${o.name})`,
         _template: 'table',
         _captcha: 'false',
+        ...(S.notifyCc ? { _cc: S.notifyCc } : {}),
         _honey: '',
         order: `${o.quantity} x ${o.product}`,
         photo_customer_liked: o.photo || '(no specific photo chosen)',

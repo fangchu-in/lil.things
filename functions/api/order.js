@@ -1,7 +1,10 @@
 // Cloudflare Pages Function
 // POST /api/order             -> saves the order (KV binding ORDERS). The page itself emails it via FormSubmit and reports the result in `mail`.
 // GET  /api/order  (header x-admin-key: SECRET) -> lists orders (SECRET = env var ADMIN_KEY)
+// PATCH /api/order (header x-admin-key) body {id, action: processing|dispatched|delivered|back, mode, url, courier, note, notify} -> moves an order along and emails the customer
 // DELETE /api/order?id=order:... (header x-admin-key) -> deletes one order
+
+import { sendCustomerEmail, safeUrl } from '../_lib/mail.js';
 
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), {
@@ -14,7 +17,7 @@ const clean = (v, n) => String(v ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').
 const refUrl = (v, req) => { try { const u = new URL(String(v || '')); return u.host === new URL(req.url).host ? u.href.slice(0, 300) : ''; } catch { return ''; } };
 const isIndia = c => /^\s*(india|bharat|in)\s*$/i.test(c);
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost({ request, env, waitUntil }) {
   // 1) Only accept orders sent from our own site
   const origin = request.headers.get('origin');
   if (origin && new URL(origin).host !== new URL(request.url).host) return json({ error: 'forbidden' }, 403);
@@ -67,7 +70,15 @@ export async function onRequestPost({ request, env }) {
   // 4) Save (shown on /orders)
   const createdAt = new Date(now).toISOString();
   const id = `order:${createdAt}_${crypto.randomUUID().slice(0, 8)}`;
-  try { await env.ORDERS.put(id, JSON.stringify({ id, createdAt, ...o })); } catch { return json({ error: 'could not save' }, 500); }
+  const rec = { id, createdAt, ...o, status: 'pending', history: [{ s: 'pending', at: createdAt }], emails: {} };
+  try { await env.ORDERS.put(id, JSON.stringify(rec)); } catch { return json({ error: 'could not save' }, 500); }
+
+  // Email the customer "we got your order" in the background (never delays or breaks the order)
+  const site = new URL(request.url).origin;
+  const job = sendCustomerEmail(env, 'received', rec, site).then(async res => {
+    try { const cur = (await env.ORDERS.get(id, 'json')) || rec; cur.emails = { ...cur.emails, received: res }; await env.ORDERS.put(id, JSON.stringify(cur)); } catch {}
+  });
+  if (waitUntil) waitUntil(job); else await job;
   return json({ ok: true });
 }
 
@@ -90,4 +101,40 @@ export async function onRequestDelete({ request, env }) {
   if (!/^order:[\w:.\-]+$/.test(id)) return json({ error: 'bad id' }, 400); // only real orders, never rate-limit keys
   await env.ORDERS.delete(id);
   return json({ ok: true });
+}
+
+const STEPS = ['pending', 'processing', 'dispatched', 'delivered'];
+
+export async function onRequestPatch({ request, env }) {
+  const key = request.headers.get('x-admin-key');
+  if (!env.ADMIN_KEY || !key || key !== env.ADMIN_KEY) return json({ error: 'unauthorized' }, 401);
+  if (!env.ORDERS) return json({ error: 'storage not configured' }, 500);
+  let d;
+  try { d = await request.json(); } catch { return json({ error: 'bad request' }, 400); }
+  if (!d || !/^order:[\w:.\-]+$/.test(String(d.id || ''))) return json({ error: 'bad id' }, 400);
+  const rec = await env.ORDERS.get(d.id, 'json');
+  if (!rec) return json({ error: 'not found' }, 404);
+
+  const cur = STEPS.includes(rec.status) ? rec.status : 'pending';
+  let next;
+  if (d.action === 'back') { if (cur === 'pending') return json({ error: 'already at start' }, 400); next = STEPS[STEPS.indexOf(cur) - 1]; }
+  else if (['processing', 'dispatched', 'delivered'].includes(d.action)) next = d.action;
+  else return json({ error: 'bad action' }, 400);
+
+  if (next === 'dispatched') {
+    const mode = d.mode === 'hand' ? 'hand' : 'courier';
+    const url = safeUrl(d.url);
+    if (mode === 'courier' && d.url && !url) return json({ error: 'The tracking link must start with https://' }, 400);
+    rec.shipping = { mode, url: mode === 'courier' ? url : '', courier: mode === 'courier' ? clean(d.courier, 60) : '', note: clean(d.note, 200) };
+  }
+  rec.status = next;
+  rec.history = [...(rec.history || [{ s: 'pending', at: rec.createdAt }]), { s: next, at: new Date().toISOString() }];
+
+  let email = null;
+  if (d.action !== 'back' && (next === 'dispatched' || next === 'delivered') && d.notify !== false) {
+    email = await sendCustomerEmail(env, next, rec, new URL(request.url).origin);
+    rec.emails = { ...(rec.emails || {}), [next]: email };
+  }
+  await env.ORDERS.put(d.id, JSON.stringify(rec));
+  return json({ ok: true, order: rec, email });
 }

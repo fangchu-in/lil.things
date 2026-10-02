@@ -7,6 +7,8 @@ window.SITE = {
   whatsapp: '919766327697',
 
   // FormSubmit form id (replaces the email address in FormSubmit links; safe to be public). Leave '' to turn the email layer off.
+  // Extra people who get a copy of every new-order email (comma separated, '' for none)
+  notifyCc: 'poojabanwari@gmail.com,vaara@ektitli.org',
   formsubmitId: '3eef430afbb3323ac2f996d71046c81e',
 
   makingTime: '3-14 days', // depends on the product chosen

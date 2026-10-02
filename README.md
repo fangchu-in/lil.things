@@ -37,6 +37,24 @@ Each category has its own share link with a preview picture and description, for
 Customers can be from any country: they pick a country code (or type the full number starting with +).
 Spam protection: hidden trap field, minimum fill time, same-site check and a rate limit.
 
+## Order status and customer emails
+On `/orders.html` every order has a status: **Pending → Processing → Dispatched → Delivered**. Use the tabs at the top to see only one stage.
+- **Start making**: marks it Processing (no email).
+- **Dispatch…**: choose *Courier* (paste the tracking link, e.g. from trackcourier.io, and optionally the courier name) or *Hand delivery*, add an optional note, and the customer is emailed with a "Track your order" button.
+- **Mark delivered**: emails the customer a thank-you. Untick "Email the customer" in the pop-up if you don't want an email.
+- **Undo** moves an order back one step (no email). The customer also gets an automatic "we got your order" email when they order.
+- Copies of the emails to the customer also go to the addresses in `MAIL_CC` (default in `functions/_lib/mail.js`). Copies of new-order emails to you go to `notifyCc` in `assets/config.js`.
+
+### Switch on customer emails (once, free)
+FormSubmit can only email you, so customer emails use Brevo (free: 300 emails a day).
+1. Sign up at https://www.brevo.com.
+2. Brevo → **Senders, domains & dedicated IPs → Senders → Add a sender**: `vaara@ektitli.org`, then click the verification link Brevo emails there.
+3. Brevo → **SMTP & API → API keys → Generate a new API key**. Copy it.
+4. Cloudflare → Pages project → Settings → Variables and Secrets → add a **secret** `BREVO_API_KEY` with that key. Optional plain variables: `MAIL_FROM` (default `vaara@ektitli.org`) and `MAIL_CC` (comma separated, default `poojabanwari@gmail.com,vaara@ektitli.org`).
+5. Redeploy (Deployments → Retry). Place a test order: the customer address should receive "We got your order", and `/orders.html` shows **Customer: order received: sent**.
+Until the key is added nothing breaks: statuses work and the page says customer emails are not switched on.
+If customer emails land in spam, in Brevo also **authenticate the domain** `ektitli.org` (adds DNS records).
+
 ## Cloudflare Pages setup (once)
 1. Pages project `lil-things` → Settings → Builds: **Build command** `npm run build`, **Build output directory** `dist`. Connect it to GitHub repo `fangchu-in/lil.things`, production branch `main`.
 2. Workers & Pages → Storage → **KV → Create namespace** called `lil-orders`.

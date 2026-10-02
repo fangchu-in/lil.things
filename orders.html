@@ -9,6 +9,7 @@
 <style>
   :root{--ink:#2E2433;--bg:#FFF9F1;--coral:#FF6F61}
   *{box-sizing:border-box}
+  [hidden]{display:none!important}
   body{margin:0;font-family:Nunito,sans-serif;background:var(--bg);color:var(--ink);padding:1.25rem;max-width:760px;margin-inline:auto}
   h1{font-family:Fredoka,sans-serif;margin:.5rem 0 1rem}
   form{display:flex;gap:.5rem}
@@ -32,6 +33,27 @@
   .tags{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.3rem}
   .tag{font-style:normal;font-size:.8rem;font-weight:700;border-radius:999px;padding:.1rem .7rem;border:2px solid var(--ink)}
   .tag.ok{background:#bdf0d9}.tag.warn{background:#FFE0A3}
+  .chips{display:flex;gap:.4rem;flex-wrap:wrap;margin:.2rem 0 .6rem}
+  .chip{background:#fff;color:var(--ink);box-shadow:none;padding:.3rem .8rem;font-size:.9rem}
+  .chip.on{background:var(--ink);color:#fff}
+  .top{display:flex;justify-content:space-between;gap:.5rem;align-items:flex-start}
+  .st{font-style:normal;font-weight:800;font-size:.8rem;border-radius:999px;padding:.15rem .75rem;border:2px solid var(--ink);white-space:nowrap}
+  .st.pending{background:#FFE0A3}.st.processing{background:#cfe3ff}.st.dispatched{background:#e5d4ff}.st.delivered{background:#bdf0d9}
+  .row button.go{padding:.3rem .9rem;font-size:1rem}
+  .row button.sub{background:#fff;color:var(--ink);box-shadow:none;padding:.3rem .9rem;font-size:1rem}
+  .ship{background:#F1E8FF;border-radius:10px;padding:.4rem .7rem}
+  dialog#sdlg{border:3px solid var(--ink);border-radius:18px;padding:1.1rem;width:min(94vw,460px);background:#fff}
+  dialog#sdlg::backdrop{background:rgba(46,36,51,.6)}
+  #sdlg h2{font-family:Fredoka,sans-serif;margin:0 0 .6rem;font-size:1.3rem}
+  #sdlg label{display:block;font-weight:700;margin:.6rem 0 .2rem}
+  #sdlg input[type=text],#sdlg input[type=url]{width:100%}
+  #sdlg .opt{display:flex;gap:1.2rem}#sdlg .opt label{font-weight:700;margin:.3rem 0}
+  #sdlg .opt input,#sdlg .chk input{flex:none;width:auto;accent-color:var(--coral)}
+  #sdlg .chk{display:flex;gap:.5rem;align-items:center;font-weight:700;margin:.8rem 0}
+  #sdlg small{opacity:.7;display:block;margin-top:.2rem}
+  #sdlg .btns{display:flex;gap:.5rem;justify-content:flex-end;margin-top:.8rem}
+  #sdlg .btns .sub{background:#fff;color:var(--ink);box-shadow:none}
+  #sErr{color:#c0392b;font-weight:700;min-height:1.2em;margin:.4rem 0 0}
 </style>
 </head>
 <body>
@@ -39,38 +61,127 @@
 <form id="f"><input id="k" type="password" placeholder="Admin key" autocomplete="current-password"><button>View</button></form>
 <p id="msg"></p>
 <p id="count"></p>
+<div class="chips" id="chips" hidden></div>
 <div id="list"></div>
+<dialog id="sdlg"><form method="dialog" id="sform" style="display:block" novalidate>
+  <h2 id="sTitle"></h2>
+  <div id="sShip">
+    <div class="opt"><label><input type="radio" name="mode" value="courier" checked> 📦 Courier</label><label><input type="radio" name="mode" value="hand"> 🤝 Hand delivery</label></div>
+    <div id="sCourier">
+      <label for="sUrl">Tracking link</label>
+      <input id="sUrl" type="url" placeholder="https://trackcourier.io/track-and-trace/..." autocomplete="off">
+      <small>Paste the tracking link, e.g. from trackcourier.io. It becomes a "Track your order" button in the email.</small>
+      <label for="sCo">Courier name (optional)</label>
+      <input id="sCo" type="text" maxlength="60" placeholder="e.g. India Post, DTDC">
+    </div>
+  </div>
+  <label for="sNote" id="sNoteL">Note for the customer (optional)</label>
+  <input id="sNote" type="text" maxlength="200" placeholder="">
+  <label class="chk"><input type="checkbox" id="sNotify" checked> Email the customer</label>
+  <p id="sErr"></p>
+  <div class="btns"><button type="button" class="sub" id="sCancel">Cancel</button><button type="submit" id="sOk">Save</button></div>
+</form></dialog>
 <dialog id="pop"><div id="popBar"><span id="popTitle"></span><button type="button" id="popClose">Close</button></div><div id="popBody"></div></dialog>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = o => (!o.via && o.mobile.length === 10 ? '91' : '') + o.mobile; // very old orders had no country code
-let key = '';
+let key = '', orders = [], filter = 'all';
+const STAT = { pending: 'Pending', processing: 'Processing', dispatched: 'Dispatched', delivered: 'Delivered' };
+const st = o => STAT[o.status] ? o.status : 'pending';
+const flash = (t, ok) => { $('msg').style.color = ok ? '#1e8e5a' : '#c0392b'; $('msg').textContent = t; };
+const mailTag = (label, v) => !v ? '' : v === 'sent' ? `<i class="tag ok">${label}: sent</i>` : `<i class="tag warn" title="${esc(v)}">${label}: ${esc(v)}</i>`;
+
 async function load(k){
-  key = k;
-  $('msg').textContent = '';
-  const r = await fetch('/api/order', { headers: { 'x-admin-key': k } });
-  if (!r.ok) { $('msg').textContent = r.status === 401 ? 'Wrong key.' : 'Could not load orders.'; return; }
-  const orders = await r.json();
-  $('count').textContent = orders.length + (orders.length === 1 ? ' order' : ' orders');
-  $('list').innerHTML = orders.length ? orders.map(o => `
-    <div class="o">
-      <b>${esc(o.quantity)} × ${esc(o.product)}</b>
+  if (k !== undefined) key = k;
+  const r = await fetch('/api/order', { headers: { 'x-admin-key': key } });
+  if (!r.ok) { flash(r.status === 401 ? 'Wrong key.' : 'Could not load orders.'); return; }
+  orders = await r.json();
+  render();
+}
+function render(){
+  const counts = { all: orders.length };
+  for (const k in STAT) counts[k] = orders.filter(o => st(o) === k).length;
+  $('chips').hidden = !orders.length;
+  $('chips').innerHTML = [['all', 'All'], ...Object.entries(STAT)].map(([k, n]) =>
+    `<button type="button" class="chip${filter === k ? ' on' : ''}" data-f="${k}">${n} (${counts[k]})</button>`).join('');
+  const list = filter === 'all' ? orders : orders.filter(o => st(o) === filter);
+  $('count').textContent = orders.length ? list.length + (list.length === 1 ? ' order' : ' orders') : '';
+  $('list').innerHTML = list.length ? list.map(card).join('') : `<p>${orders.length ? 'Nothing here.' : 'No orders yet.'}</p>`;
+}
+function card(o){
+  const s = st(o), sh = o.shipping, em = o.emails || {};
+  const act = {
+    pending: `<button type="button" class="go" data-a="processing">Start making</button><button type="button" class="sub" data-a="dispatched">Dispatch…</button>`,
+    processing: `<button type="button" class="go" data-a="dispatched">Dispatch…</button>`,
+    dispatched: `<button type="button" class="go" data-a="delivered">Mark delivered</button>`,
+    delivered: '',
+  }[s];
+  return `
+    <div class="o" data-id="${esc(o.id)}">
+      <div class="top"><b>${esc(o.quantity)} × ${esc(o.product)}</b><i class="st ${s}">${STAT[s]}</i></div>
       ${o.note ? `<span class="note">🎨 ${esc(o.note)}</span>` : ''}
       ${o.photo || o.page ? `<span>🖼️ <a class="pv" data-kind="${o.photo ? 'img' : 'page'}" href="${esc(o.photo || o.page)}" target="_blank" rel="noopener">${o.photo ? 'See the photo they liked' : 'See the product page'}</a>${o.photo && o.page ? ` · <a class="pv" data-kind="page" href="${esc(o.page)}" target="_blank" rel="noopener">product page</a>` : ''}</span>` : ''}
       <span>👤 ${esc(o.name)}</span>
       <span>📱 +${esc(num(o))}</span>
       <span>✉️ ${esc(o.email)}</span>
       <span>📍 ${esc(o.address)}, ${esc(o.city)} - ${esc(o.pin)}, ${esc(o.country)}</span>
+      ${sh && (s === 'dispatched' || s === 'delivered') ? `<span class="ship">${sh.mode === 'hand' ? '🤝 Hand delivery' : '📦 ' + esc(sh.courier || 'Courier')}${sh.url ? ` · <a href="${esc(sh.url)}" target="_blank" rel="noopener">tracking link</a>` : ''}${sh.note ? ` · ${esc(sh.note)}` : ''}</span>` : ''}
       <small>${new Date(o.createdAt).toLocaleString()}</small>
       <span class="tags">${o.via === 'plain' ? '<i class="tag warn">Chose no WhatsApp</i>' : '<i class="tag ok">WhatsApp opened</i>'}
-        ${o.mail === 'sent' ? '<i class="tag ok">Email sent</i>' : o.mail ? `<i class="tag warn">Email: ${esc(o.mail)}</i>` : ''}</span>
-      <div class="row"><a href="tel:+${esc(num(o))}">Call</a>
+        ${o.mail === 'sent' ? '<i class="tag ok">Email to us: sent</i>' : o.mail ? `<i class="tag warn">Email to us: ${esc(o.mail)}</i>` : ''}
+        ${mailTag('Customer: order received', em.received)}${mailTag('Customer: dispatched', em.dispatched)}${mailTag('Customer: delivered', em.delivered)}</span>
+      <div class="row">${act}<a href="tel:+${esc(num(o))}">Call</a>
       <a href="https://wa.me/${esc(num(o))}" target="_blank" rel="noopener">WhatsApp</a>
       <a href="mailto:${esc(o.email)}">Email</a>
+      ${s !== 'pending' ? `<button type="button" class="sub" data-a="back">↩ Undo</button>` : ''}
       <button type="button" class="del" data-id="${esc(o.id)}" data-name="${esc(o.quantity)} x ${esc(o.product)} (${esc(o.name)})">Delete</button></div>
-    </div>`).join('') : '<p>No orders yet.</p>';
+    </div>`;
 }
+
+// ---- change status ----
+const sdlg = $('sdlg'), sform = $('sform');
+let pendingChange = null;
+async function change(id, body){
+  const r = await fetch('/api/order', { method: 'PATCH', headers: { 'x-admin-key': key, 'Content-Type': 'application/json' }, body: JSON.stringify({ id, ...body }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) return { err: j.error || 'Could not update. Try again.' };
+  return j;
+}
+function toast(j){
+  if (j.email === 'sent') flash('Done. The customer has been emailed.', true);
+  else if (j.email === 'not configured') flash('Done. Customer emails are not switched on yet (see the README), so nothing was emailed.', false);
+  else if (j.email) flash('Status saved, but the customer email failed: ' + j.email + '. You can WhatsApp them instead.', false);
+  else flash('Done.', true);
+}
+$('sCancel').onclick = () => sdlg.close();
+sform.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => { $('sCourier').hidden = sform.mode.value === 'hand'; });
+sform.onsubmit = async e => {
+  e.preventDefault();
+  const { id, action } = pendingChange;
+  $('sErr').textContent = ''; $('sOk').disabled = true;
+  const body = { action, notify: $('sNotify').checked, note: $('sNote').value.trim() };
+  if (action === 'dispatched') Object.assign(body, { mode: sform.mode.value, url: $('sUrl').value.trim(), courier: $('sCo').value.trim() });
+  const j = await change(id, body);
+  $('sOk').disabled = false;
+  if (j.err) { $('sErr').textContent = j.err; return; }
+  sdlg.close(); toast(j); load();
+};
+function openStatus(id, action){
+  const o = orders.find(x => x.id === id); if (!o) return;
+  pendingChange = { id, action };
+  const disp = action === 'dispatched';
+  $('sTitle').textContent = disp ? `Dispatch: ${o.quantity} × ${o.product}` : `Delivered: ${o.quantity} × ${o.product}`;
+  $('sShip').hidden = !disp;
+  $('sCourier').hidden = false; sform.mode.value = 'courier';
+  $('sUrl').value = ''; $('sCo').value = ''; $('sNote').value = ''; $('sErr').textContent = '';
+  $('sNote').placeholder = disp ? 'e.g. Parcel left today, usually 3-5 days' : 'e.g. Handed over at the flea market';
+  $('sNotify').checked = true;
+  $('sOk').textContent = disp ? 'Mark dispatched' : 'Mark delivered';
+  sdlg.showModal();
+}
+$('chips').onclick = e => { const b = e.target.closest('.chip'); if (b) { filter = b.dataset.f; render(); } };
+
 const pop = $('pop');
 $('popClose').onclick = () => pop.close();
 pop.addEventListener('click', e => { if (e.target === pop) pop.close(); });
@@ -87,13 +198,23 @@ $('list').addEventListener('click', e => {
   pop.showModal();
 });
 $('list').onclick = async e => {
+  const g = e.target.closest('button[data-a]');
+  if (g) {
+    const id = g.closest('.o').dataset.id, a = g.dataset.a;
+    if (a === 'dispatched' || a === 'delivered') return openStatus(id, a);
+    if (a === 'back' && !confirm('Move this order back one step? (No email is sent.)')) return;
+    g.disabled = true;
+    const j = await change(id, { action: a });
+    if (j.err) { g.disabled = false; return flash(j.err); }
+    flash('Done.', true); return load();
+  }
   const b = e.target.closest('button.del'); if (!b) return;
   if (!confirm('Delete this order?\n\n' + b.dataset.name + '\n\nThis cannot be undone.')) return;
   b.disabled = true;
   const r = await fetch('/api/order?id=' + encodeURIComponent(b.dataset.id), { method: 'DELETE', headers: { 'x-admin-key': key } });
-  if (r.ok) load(key); else { b.disabled = false; $('msg').textContent = 'Could not delete. Try again.'; }
+  if (r.ok) load(); else { b.disabled = false; flash('Could not delete. Try again.'); }
 };
-$('f').onsubmit = e => { e.preventDefault(); load($('k').value.trim()); };
+$('f').onsubmit = e => { e.preventDefault(); flash(''); load($('k').value.trim()); };
 </script>
 </body>
 </html>
