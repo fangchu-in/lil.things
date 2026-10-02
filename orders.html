@@ -22,6 +22,12 @@
   .row{display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap}
   .row a{font-weight:700;color:var(--ink);border:2px solid var(--ink);border-radius:999px;padding:.3rem .9rem;text-decoration:none;background:#FFC93C}
   #count{font-weight:700}
+  dialog#pop{border:3px solid var(--ink);border-radius:18px;padding:0;width:min(94vw,560px);background:#fff;overflow:hidden}
+  dialog#pop::backdrop{background:rgba(46,36,51,.6)}
+  #popBar{display:flex;justify-content:space-between;align-items:center;padding:.5rem .8rem;background:#FFC93C;border-bottom:3px solid var(--ink);font:600 1rem Fredoka,sans-serif}
+  #popBar button{padding:.2rem .8rem;font-size:.95rem}
+  #popBody img{display:block;width:100%;max-height:75vh;object-fit:contain;background:#FFF9F1}
+  #popBody iframe{display:block;width:100%;height:75vh;border:0}
   .row button.del{background:#fff;color:#c0392b;border-color:#c0392b;box-shadow:none;padding:.3rem .9rem;font-size:1rem}
   .tags{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.3rem}
   .tag{font-style:normal;font-size:.8rem;font-weight:700;border-radius:999px;padding:.1rem .7rem;border:2px solid var(--ink)}
@@ -34,6 +40,7 @@
 <p id="msg"></p>
 <p id="count"></p>
 <div id="list"></div>
+<dialog id="pop"><div id="popBar"><span id="popTitle"></span><button type="button" id="popClose">Close</button></div><div id="popBody"></div></dialog>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -50,7 +57,7 @@ async function load(k){
     <div class="o">
       <b>${esc(o.quantity)} × ${esc(o.product)}</b>
       ${o.note ? `<span class="note">🎨 ${esc(o.note)}</span>` : ''}
-      ${o.photo || o.page ? `<span>🖼️ <a href="${esc(o.photo || o.page)}" target="_blank" rel="noopener">${o.photo ? 'See the photo they liked' : 'See the product page'}</a>${o.photo && o.page ? ` · <a href="${esc(o.page)}" target="_blank" rel="noopener">product page</a>` : ''}</span>` : ''}
+      ${o.photo || o.page ? `<span>🖼️ <a class="pv" data-kind="${o.photo ? 'img' : 'page'}" href="${esc(o.photo || o.page)}" target="_blank" rel="noopener">${o.photo ? 'See the photo they liked' : 'See the product page'}</a>${o.photo && o.page ? ` · <a class="pv" data-kind="page" href="${esc(o.page)}" target="_blank" rel="noopener">product page</a>` : ''}</span>` : ''}
       <span>👤 ${esc(o.name)}</span>
       <span>📱 +${esc(num(o))}</span>
       <span>✉️ ${esc(o.email)}</span>
@@ -64,6 +71,21 @@ async function load(k){
       <button type="button" class="del" data-id="${esc(o.id)}" data-name="${esc(o.quantity)} x ${esc(o.product)} (${esc(o.name)})">Delete</button></div>
     </div>`).join('') : '<p>No orders yet.</p>';
 }
+const pop = $('pop');
+$('popClose').onclick = () => pop.close();
+pop.addEventListener('click', e => { if (e.target === pop) pop.close(); });
+pop.addEventListener('close', () => $('popBody').replaceChildren());
+$('list').addEventListener('click', e => {
+  const a = e.target.closest('a.pv');
+  if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;   // ctrl/cmd-click still opens a tab
+  e.preventDefault();
+  let el;
+  if (a.dataset.kind === 'img') { el = new Image(); el.src = a.href; el.alt = 'Photo the customer liked'; }
+  else { el = document.createElement('iframe'); el.src = a.href; el.title = 'Product page'; }
+  $('popTitle').textContent = a.dataset.kind === 'img' ? 'Photo they liked' : 'Product page';
+  $('popBody').replaceChildren(el);
+  pop.showModal();
+});
 $('list').onclick = async e => {
   const b = e.target.closest('button.del'); if (!b) return;
   if (!confirm('Delete this order?\n\n' + b.dataset.name + '\n\nThis cannot be undone.')) return;
