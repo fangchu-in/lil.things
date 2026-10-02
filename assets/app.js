@@ -52,10 +52,11 @@ $('shareSite').onclick = () => share(S.brand, 'Look at these handmade things by 
 
 // ---------- gallery viewer ----------
 const viewer = $('viewer'), vTrack = $('vTrack');
-let current = null;
+let current = null, curPhotos = [];
+let refPhoto = '', refFor = '';   // photo the customer was looking at when they tapped Order
 
 function openViewer(cat, photos) {
-  current = cat;
+  current = cat; curPhotos = photos;
   $('vTitle').textContent = `${cat.emoji} ${cat.name}`;
   $('vDesc').textContent = cat.desc;
   vTrack.replaceChildren();
@@ -85,7 +86,13 @@ viewer.addEventListener('keydown', e => {
 viewer.addEventListener('close', () => {
   if (location.hash && byId(location.hash.slice(1))) history.replaceState(null, '', location.pathname + location.search);
 });
-$('vOrder').onclick = () => { const c = current; viewer.close(); openOrder(c && c.name); };
+$('vOrder').onclick = () => {
+  const c = current;
+  const i = vTrack.clientWidth ? Math.round(vTrack.scrollLeft / vTrack.clientWidth) : 0;
+  const p = curPhotos[Math.min(i, curPhotos.length - 1)];
+  viewer.close();
+  openOrder(c && c.name, p && new URL(p.src, location.origin + '/').href);
+};
 $('vShare').onclick = () => current && share(`${current.name} · ${S.brand}`, `${current.name} by Vaara: ${current.desc}`, catShareUrl(current));
 
 // ---------- order dialog ----------
@@ -108,7 +115,8 @@ $('countries').replaceChildren(...S.countries.map(c => new Option(c.n)));
 }
 form.country.addEventListener('input', () => { const c = findCountry(form.country.value); if (c) ccSel.value = c.c; });
 
-function openOrder(productName) {
+function openOrder(productName, photoUrl) {
+  refPhoto = photoUrl || ''; refFor = productName || '';
   $('oFormWrap').hidden = false; $('oDone').hidden = true;
   msg.className = ''; msg.textContent = ''; $('waFallback').replaceChildren();
   sendBtn.disabled = plainBtn.disabled = false;
@@ -153,6 +161,8 @@ async function emailOrder(o) {
         _captcha: 'false',
         _honey: '',
         order: `${o.quantity} x ${o.product}`,
+        photo_customer_liked: o.photo || '(no specific photo chosen)',
+        product_page: o.page || '-',
         colours_patterns: o.note || '-',
         name: o.name,
         mobile: `+${o.mobile}`,
@@ -173,6 +183,7 @@ function summary(d) {
   return [
     'Hi! I would like to place an order on Lil Things by Vaara.',
     `Item: ${d.quantity} x ${d.product}`,
+    d.photo ? `Photo I liked: ${d.photo}` : (d.page ? `Product page: ${d.page}` : ''),
     d.note ? `Colours / patterns: ${d.note}` : '',
     `Name: ${d.name}`,
     `Mobile: +${d.mobile}`,
@@ -204,6 +215,10 @@ form.addEventListener('submit', async e => {
 
   const order = { product: d.product, quantity: qty, note: d.note, name: d.name, mobile: num.digits, email: d.email,
                   address: d.address, city: d.city, pin: d.pin, country: d.country, via, website: d.website, ms: Date.now() - openedAt };
+  // reference: the photo they were viewing (only if they kept that product) and the product's own page
+  const cat = S.categories.find(x => x.name === d.product);
+  if (cat) order.page = catShareUrl(cat);
+  if (refPhoto && refFor === d.product) order.photo = refPhoto;
   const waUrl = waLink(summary(order));
 
   // Open WhatsApp straight away (must happen inside the tap, or the browser blocks it)

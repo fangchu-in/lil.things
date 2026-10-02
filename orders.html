@@ -50,6 +50,7 @@ async function load(k){
     <div class="o">
       <b>${esc(o.quantity)} × ${esc(o.product)}</b>
       ${o.note ? `<span class="note">🎨 ${esc(o.note)}</span>` : ''}
+      ${o.photo || o.page ? `<span>🖼️ <a href="${esc(o.photo || o.page)}" target="_blank" rel="noopener">${o.photo ? 'See the photo they liked' : 'See the product page'}</a>${o.photo && o.page ? ` · <a href="${esc(o.page)}" target="_blank" rel="noopener">product page</a>` : ''}</span>` : ''}
       <span>👤 ${esc(o.name)}</span>
       <span>📱 +${esc(num(o))}</span>
       <span>✉️ ${esc(o.email)}</span>

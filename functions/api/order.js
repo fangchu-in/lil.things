@@ -10,6 +10,8 @@ const json = (obj, status = 200) =>
   });
 
 const clean = (v, n) => String(v ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, n);
+// only keep links that point at this same site
+const refUrl = (v, req) => { try { const u = new URL(String(v || '')); return u.host === new URL(req.url).host ? u.href.slice(0, 300) : ''; } catch { return ''; } };
 const isIndia = c => /^\s*(india|bharat|in)\s*$/i.test(c);
 
 export async function onRequestPost({ request, env }) {
@@ -36,6 +38,8 @@ export async function onRequestPost({ request, env }) {
     city: clean(d.city, 60),
     pin: clean(d.pin, 12),
     country: clean(d.country, 60),
+    photo: refUrl(d.photo, request),
+    page: refUrl(d.page, request),
     via: d.via === 'plain' ? 'plain' : 'whatsapp',
     mail: /^(sent|failed|not configured)/.test(String(d.mail || '')) ? clean(d.mail, 100) : '',
   };
