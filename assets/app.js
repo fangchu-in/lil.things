@@ -89,12 +89,29 @@ $('vOrder').onclick = () => { const c = current; viewer.close(); openOrder(c && 
 $('vShare').onclick = () => current && share(`${current.name} · ${S.brand}`, `${current.name} by Vaara: ${current.desc}`, catShareUrl(current));
 
 // ---------- order dialog ----------
-const dlg = $('orderDlg'), form = $('orderForm'), msg = $('msg'), submit = $('submitBtn');
+const dlg = $('orderDlg'), form = $('orderForm'), msg = $('msg');
+const sendBtn = $('submitBtn'), plainBtn = $('plainBtn'), ccSel = $('cc');
 let openedAt = 0;
+
+// country list -> datalist + phone-code menu
+const norm = t => (t || '').trim().toLowerCase();
+const findCountry = name => S.countries.find(c => norm(c.n) === norm(name) || (c.a || []).includes(norm(name)));
+$('countries').replaceChildren(...S.countries.map(c => new Option(c.n)));
+{
+  const seen = new Set();
+  S.countries.forEach(c => {
+    if (seen.has(c.c)) return;
+    seen.add(c.c);
+    ccSel.add(new Option(`+${c.c} ${c.i || c.n}`, c.c));
+  });
+  ccSel.value = '91';
+}
+form.country.addEventListener('input', () => { const c = findCountry(form.country.value); if (c) ccSel.value = c.c; });
 
 function openOrder(productName) {
   $('oFormWrap').hidden = false; $('oDone').hidden = true;
   msg.className = ''; msg.textContent = ''; $('waFallback').replaceChildren();
+  sendBtn.disabled = plainBtn.disabled = false;
   if (productName) select.value = productName;
   openedAt = Date.now();
   if (!dlg.open) dlg.showModal();
@@ -106,7 +123,20 @@ $('doneClose').onclick = () => dlg.close();
 dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
 
 const fail = t => { msg.className = 'err'; msg.textContent = t; };
-const isIndia = c => /^\s*(india|bharat|in)\s*$/i.test(c);
+
+// Works out the full international number (digits only, with country code) or returns null
+function fullNumber(raw, cc) {
+  raw = (raw || '').trim();
+  let d;
+  if (/^(\+|00)/.test(raw)) d = raw.replace(/\D/g, '').replace(/^00/, ''); // typed with + : already complete
+  else {
+    const nat = raw.replace(/\D/g, '').replace(/^0+/, '');
+    d = (nat.length >= 11 && nat.startsWith(cc)) ? nat : cc + nat;            // 11+ digits starting with the code: code already included
+  }
+  if (d.startsWith('91') && d.length !== 12) return { err: 'Indian mobile numbers have 10 digits after +91.' };
+  if (!/^\d{8,15}$/.test(d)) return { err: 'Please check your mobile number. Pick your country code and enter the number.' };
+  return { digits: d };
+}
 
 function summary(d) {
   return [
@@ -114,7 +144,7 @@ function summary(d) {
     `Item: ${d.quantity} x ${d.product}`,
     d.note ? `Colours / patterns: ${d.note}` : '',
     `Name: ${d.name}`,
-    `Mobile: ${d.mobile}`,
+    `Mobile: +${d.mobile}`,
     `Email: ${d.email}`,
     `Address: ${d.address}, ${d.city} - ${d.pin}, ${d.country}`,
   ].filter(Boolean).join('\n');
@@ -123,44 +153,62 @@ function summary(d) {
 form.addEventListener('submit', async e => {
   e.preventDefault();
   msg.className = ''; msg.textContent = ''; $('waFallback').replaceChildren();
+  const via = e.submitter && e.submitter.value === 'plain' ? 'plain' : 'whatsapp';
   const d = Object.fromEntries(new FormData(form));
   for (const k of ['name', 'email', 'address', 'city', 'pin', 'country', 'note']) d[k] = (d[k] || '').trim();
-  const india = isIndia(d.country);
-
-  let digits = (d.mobile || '').replace(/\D/g, '');
-  if (india) digits = digits.replace(/^(?:91|0)(?=\d{10}$)/, '');
+  const c = findCountry(d.country);
+  const india = !!c && c.c === '91' && c.n === 'India';
 
   if (!d.product) return fail('Please choose what you would like.');
   const qty = parseInt(d.quantity, 10);
   if (!(qty >= 1 && qty <= 100)) return fail('Quantity should be between 1 and 100.');
   if (!d.name) return fail('Please enter your name.');
-  if (india ? !/^\d{10}$/.test(digits) : !/^\d{7,15}$/.test(digits)) return fail(india ? 'Please enter a valid 10-digit mobile number.' : 'Please enter your mobile number with country code.');
+  const num = fullNumber(d.mobile, d.cc);
+  if (num.err) return fail(num.err);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(d.email)) return fail('Please enter a valid email address.');
   if (d.address.length < 5) return fail('Please enter your address.');
   if (!d.city) return fail('Please enter your city.');
-  if (india ? !/^\d{6}$/.test(d.pin) : !/^[A-Za-z0-9 -]{3,12}$/.test(d.pin)) return fail(india ? 'Please enter a valid 6-digit pin code.' : 'Please enter a valid postal code.');
   if (!d.country) return fail('Please enter your country.');
+  if (india ? !/^\d{6}$/.test(d.pin) : !/^[A-Za-z0-9 -]{3,12}$/.test(d.pin)) return fail(india ? 'Please enter a valid 6-digit pin code.' : 'Please enter a valid postal / zip code.');
 
-  const order = { ...d, quantity: qty, mobile: digits, ms: Date.now() - openedAt };
-  submit.disabled = true; submit.textContent = 'Sending...';
+  const order = { product: d.product, quantity: qty, note: d.note, name: d.name, mobile: num.digits, email: d.email,
+                  address: d.address, city: d.city, pin: d.pin, country: d.country, via, website: d.website, ms: Date.now() - openedAt };
+  const waUrl = waLink(summary(order));
+
+  // Open WhatsApp straight away (must happen inside the tap, or the browser blocks it)
+  if (via === 'whatsapp' && S.whatsapp) window.open(waUrl, '_blank', 'noopener');
+
+  sendBtn.disabled = plainBtn.disabled = true;
+  sendBtn.textContent = 'Sending...';
+  let saved = false;
   try {
-    const r = await fetch('/api/order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(order) });
-    if (!r.ok) throw new Error(String(r.status));
-    $('doneWa').href = waLink(summary(order));
-    $('doneWa').hidden = !S.whatsapp;
-    $('oFormWrap').hidden = true; $('oDone').hidden = false;
-    dlg.scrollTop = 0;
-    form.reset(); form.country.value = 'India'; form.quantity.value = 1;
-  } catch {
-    fail('We could not send your order automatically. Please send it to us on WhatsApp instead:');
-    if (S.whatsapp) {
-      const a = el('a', 'btn wa-btn', '💬 Send order on WhatsApp');
-      a.href = waLink(summary(order)); a.target = '_blank'; a.rel = 'noopener';
-      $('waFallback').append(a);
-    }
-  } finally {
-    submit.disabled = false; submit.textContent = 'Send my order';
+    const r = await fetch('/api/order', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(order) });
+    saved = r.ok;
+  } catch {}
+  sendBtn.textContent = '💬 Send order on WhatsApp';
+
+  const wa = $('doneWa');
+  wa.href = waUrl;
+  wa.hidden = !S.whatsapp;
+  if (via === 'whatsapp') {
+    $('doneTitle').textContent = saved ? 'Almost done!' : 'One more step!';
+    $('doneText').textContent = saved
+      ? 'Your order is saved. WhatsApp should have opened with your details: please press Send there so we see it right away. Didn\'t open? Tap the button below.'
+      : 'We could not save your order online, so please press Send in WhatsApp (it should have opened). That is how we will get your order. Didn\'t open? Tap the button below.';
+    wa.textContent = '💬 Open WhatsApp';
+  } else if (saved) {
+    $('doneTitle').textContent = 'Thank you!';
+    $('doneText').textContent = 'Your order request is in. Vaara\'s parents will contact you soon to confirm.';
+    wa.textContent = '💬 Also message us on WhatsApp';
+  } else {
+    sendBtn.disabled = plainBtn.disabled = false;
+    fail('Something went wrong and your order was not saved. Please try again, or send it to us on WhatsApp:');
+    if (S.whatsapp) { const a = el('a', 'btn wa-btn', '💬 Send order on WhatsApp'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener'; $('waFallback').append(a); }
+    return;
   }
+  $('oFormWrap').hidden = true; $('oDone').hidden = false;
+  dlg.scrollTop = 0;
+  form.reset(); form.country.value = 'India'; ccSel.value = '91'; form.quantity.value = 1;
 });
 
 // ---------- hero slideshow (photos are already in the HTML, built at deploy time) ----------

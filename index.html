@@ -96,13 +96,13 @@
     <li><b>11</b><span>years old</span></li>
     <li><b id="factCount">9</b><span>things I make</span></li>
     <li><b>100%</b><span>handmade</span></li>
-    <li><b id="factTime">7-14</b><span>days to make yours</span></li>
+    <li><b id="factTime">3-14</b><span>days to make yours</span></li>
   </ul>
 </section>
 
 <section class="products" id="products">
   <h2>What I <span class="hl">make</span></h2>
-  <p class="sub">Everything is <b>made to order</b>, so each piece is one of a kind. The photos are for inspiration: you can ask for the same colours and pattern, or tell me your own!</p>
+  <p class="sub">These are real pieces I've made, and some are sold at events while stock lasts. Every online order is <b>made to order</b>: you can ask for the same design, or something different with your own colours and patterns!</p>
   <div id="groups"></div>
 </section>
 
@@ -112,7 +112,7 @@
     <li><b>1</b><span>Pick something you like and tap <em>Order now</em>.</span></li>
     <li><b>2</b><span>Tell me the colours and patterns you want, and where to send it.</span></li>
     <li><b>3</b><span>We'll call or message you to confirm the price and delivery.</span></li>
-    <li><b>4</b><span>Vaara makes it by hand in <span class="mt">7-14 days</span>!</span></li>
+    <li><b>4</b><span>Vaara makes it by hand in <span class="mt">3-14 days</span>, depending on the product.</span></li>
   </ol>
   <p class="parents">Orders are handled by Vaara's parents.</p>
   <div class="cta center">
@@ -139,7 +139,7 @@
     <button class="nav-btn next" id="vNext" aria-label="Next photo">›</button>
   </div>
   <p class="v-count" id="vCount"></p>
-  <p class="v-note">Made to order: photos are for inspiration.</p>
+  <p class="v-note">Real pieces made by Vaara. Order the same design or a new one!</p>
   <div class="v-actions">
     <button type="button" class="btn" id="vOrder">Order now</button>
     <button type="button" class="btn ghost" id="vShare">Share</button>
@@ -151,7 +151,7 @@
   <button class="x" id="oClose" aria-label="Close">✕</button>
   <div id="oFormWrap">
     <h3 id="oTitle">Place an order</h3>
-    <p class="o-sub">Made to order in <span class="mt">7-14 days</span>. We'll contact you to confirm price and delivery.</p>
+    <p class="o-sub">Made to order in <span class="mt">3-14 days</span>, depending on the product. We'll contact you to confirm price and delivery.</p>
     <form id="orderForm" novalidate>
       <div class="two">
         <label>What would you like?
@@ -161,17 +161,21 @@
           <input name="quantity" type="number" min="1" max="100" value="1" required inputmode="numeric">
         </label>
       </div>
-      <label>Colours, patterns, size <small>or "same as the photo"</small>
-        <textarea name="note" rows="3" maxlength="500" placeholder="e.g. pink and white with small flowers, or same as the photo"></textarea>
+      <label>Colours, patterns, size <small>same design as the photo, or your own idea</small>
+        <textarea name="note" rows="3" maxlength="500" placeholder="e.g. same as the photo, or pink and white with small flowers"></textarea>
       </label>
       <fieldset>
         <legend>Your details</legend>
         <label>Name
           <input name="name" required autocomplete="name" maxlength="80" placeholder="Your name">
         </label>
-        <label>Mobile number <small>with country code if outside India</small>
-          <input name="mobile" required type="tel" inputmode="tel" autocomplete="tel" placeholder="10-digit mobile number">
-        </label>
+        <div class="field">
+          <label for="mobile">Mobile number <small>choose your country code, or type the full number starting with +</small></label>
+          <div class="phone">
+            <select id="cc" name="cc" aria-label="Country code"></select>
+            <input id="mobile" name="mobile" required type="tel" inputmode="tel" autocomplete="tel" placeholder="Mobile number">
+          </div>
+        </div>
         <label>Email
           <input name="email" required type="email" autocomplete="email" maxlength="120" placeholder="you@example.com">
         </label>
@@ -189,25 +193,22 @@
         <label>Country
           <input name="country" required autocomplete="country-name" maxlength="60" value="India" list="countries">
         </label>
-        <datalist id="countries">
-          <option>India</option><option>United States</option><option>United Kingdom</option><option>Canada</option>
-          <option>Australia</option><option>United Arab Emirates</option><option>Singapore</option><option>Germany</option>
-          <option>Nepal</option><option>Saudi Arabia</option><option>Qatar</option><option>New Zealand</option>
-        </datalist>
+        <datalist id="countries"></datalist>
       </fieldset>
       <input type="text" name="website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
       <p class="priv">We use these details only to contact you about your order.</p>
-      <button class="btn" type="submit" id="submitBtn">Send my order</button>
+      <button class="btn wa-btn" type="submit" name="mode" value="whatsapp" id="submitBtn">💬 Send order on WhatsApp</button>
+      <p class="priv wa-hint">This saves your order and opens WhatsApp with the details filled in. Just press <b>Send</b> there to confirm.</p>
+      <button class="linkbtn" type="submit" name="mode" value="plain" id="plainBtn">I don't use WhatsApp: send my order without it</button>
       <p id="msg" role="alert"></p>
       <div id="waFallback"></div>
     </form>
   </div>
   <div id="oDone" hidden>
     <div class="done-emoji" aria-hidden="true">🎉</div>
-    <h3>Thank you!</h3>
-    <p>Your order request is in. Vaara's parents will contact you soon to confirm.</p>
-    <p class="strong">To make sure we see it right away, tap below to send us the details on WhatsApp.</p>
-    <a id="doneWa" class="btn wa-btn" target="_blank" rel="noopener">💬 Send on WhatsApp</a>
+    <h3 id="doneTitle">Order received!</h3>
+    <p id="doneText"></p>
+    <a id="doneWa" class="btn wa-btn" target="_blank" rel="noopener">💬 Open WhatsApp</a>
     <button type="button" class="btn ghost" id="doneClose">Close</button>
   </div>
 </dialog>

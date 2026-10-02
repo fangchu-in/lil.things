@@ -6,7 +6,7 @@ window.SITE = {
   // WhatsApp number with country code, digits only
   whatsapp: '919766327697',
 
-  makingTime: '7-14 days',
+  makingTime: '3-14 days', // depends on the product chosen
 
   // Groups are the headings on the page. Categories appear in this order.
   groups: [
@@ -27,6 +27,7 @@ window.SITE = {
     { id: 'hair-clips',      group: 'crochet', name: 'Hair Clips',                  emoji: '💇', color: '#C3A6FF', desc: 'Cute crochet hair clips in lots of shapes and colours.' },
     { id: 'leaf-bookmarks',  group: 'crochet', name: 'Leaf Accessories & Bookmarks', emoji: '🍃', color: '#7ED9B6', desc: 'Crochet leaf bookmarks and little leaf accessories. Perfect for book lovers!' },
     { id: 'coasters',        group: 'crochet', name: 'Coasters',                    emoji: '☕', color: '#FFC93C', desc: 'Crochet coasters to keep your table tidy and your cup cosy.' },
+    { id: 'sunglass-covers', group: 'crochet', name: 'Sunglass Covers',             emoji: '🕶️', color: '#FF8FB1', desc: 'Soft crochet covers that keep your sunglasses safe and scratch-free.' },
     { id: 'loom-bands',      group: 'loom',    name: 'Loom Bands',                  emoji: '🌈', color: '#8EC9FF', desc: 'Bright, bouncy creations made on the rubber-band loom.' },
     { id: 'painted-bottles', group: 'loom',    name: 'Painted Glass Bottles',       emoji: '🍾', color: '#8EC9FF', desc: 'Glass bottles painted by hand. No two are the same.' },
     { id: 'painted-rocks',   group: 'loom',    name: 'Painted Rocks',               emoji: '🪨', color: '#FF8FB1', desc: 'Pebbles turned into tiny artworks.' },
@@ -36,5 +37,38 @@ window.SITE = {
     // 2. In GitHub, create the folder images/bows and upload photos into it
     //    (GitHub: Add file > Create new file > type  images/bows/.gitkeep  > Commit).
     // { id: 'bows', group: 'crochet', name: 'Bows', emoji: '🎀', color: '#FF8FB1', desc: 'Cute crochet bows for hair and gifts.' },
+  ],
+
+  // Country list for the order form: n = name, c = phone code, i = short label in the code menu, a = other spellings
+  countries: [
+    { n: 'India', i: 'IN', c: '91', a: ['in', 'bharat'] },
+    { n: 'United States', i: 'US/CA', c: '1', a: ['usa', 'us', 'u.s.', 'america'] },
+    { n: 'Canada', c: '1' },
+    { n: 'United Kingdom', i: 'UK', c: '44', a: ['uk', 'england', 'britain'] },
+    { n: 'Australia', i: 'AU', c: '61' },
+    { n: 'New Zealand', i: 'NZ', c: '64' },
+    { n: 'United Arab Emirates', i: 'UAE', c: '971', a: ['uae', 'dubai'] },
+    { n: 'Saudi Arabia', i: 'KSA', c: '966' },
+    { n: 'Qatar', i: 'QA', c: '974' },
+    { n: 'Kuwait', i: 'KW', c: '965' },
+    { n: 'Oman', i: 'OM', c: '968' },
+    { n: 'Bahrain', i: 'BH', c: '973' },
+    { n: 'Singapore', i: 'SG', c: '65' },
+    { n: 'Malaysia', i: 'MY', c: '60' },
+    { n: 'Hong Kong', i: 'HK', c: '852' },
+    { n: 'Japan', i: 'JP', c: '81' },
+    { n: 'Germany', i: 'DE', c: '49' },
+    { n: 'France', i: 'FR', c: '33' },
+    { n: 'Netherlands', i: 'NL', c: '31' },
+    { n: 'Ireland', i: 'IE', c: '353' },
+    { n: 'Switzerland', i: 'CH', c: '41' },
+    { n: 'Italy', i: 'IT', c: '39' },
+    { n: 'Spain', i: 'ES', c: '34' },
+    { n: 'Sweden', i: 'SE', c: '46' },
+    { n: 'Nepal', i: 'NP', c: '977' },
+    { n: 'Sri Lanka', i: 'LK', c: '94' },
+    { n: 'Bangladesh', i: 'BD', c: '880' },
+    { n: 'South Africa', i: 'ZA', c: '27' },
+    { n: 'Kenya', i: 'KE', c: '254' },
   ],
 };

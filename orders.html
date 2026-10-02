@@ -22,6 +22,9 @@
   .row{display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap}
   .row a{font-weight:700;color:var(--ink);border:2px solid var(--ink);border-radius:999px;padding:.3rem .9rem;text-decoration:none;background:#FFC93C}
   #count{font-weight:700}
+  .tags{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.3rem}
+  .tag{font-style:normal;font-size:.8rem;font-weight:700;border-radius:999px;padding:.1rem .7rem;border:2px solid var(--ink)}
+  .tag.ok{background:#bdf0d9}.tag.warn{background:#FFE0A3}
 </style>
 </head>
 <body>
@@ -33,7 +36,7 @@
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const wa = o => (/^\s*(india|bharat|in)\s*$/i.test(o.country) && o.mobile.length === 10 ? '91' : '') + o.mobile;
+const num = o => (!o.via && o.mobile.length === 10 ? '91' : '') + o.mobile; // very old orders had no country code
 async function load(key){
   $('msg').textContent = '';
   const r = await fetch('/api/order', { headers: { 'x-admin-key': key } });
@@ -45,12 +48,14 @@ async function load(key){
       <b>${esc(o.quantity)} × ${esc(o.product)}</b>
       ${o.note ? `<span class="note">🎨 ${esc(o.note)}</span>` : ''}
       <span>👤 ${esc(o.name)}</span>
-      <span>📱 ${esc(o.mobile)}</span>
+      <span>📱 +${esc(num(o))}</span>
       <span>✉️ ${esc(o.email)}</span>
       <span>📍 ${esc(o.address)}, ${esc(o.city)} - ${esc(o.pin)}, ${esc(o.country)}</span>
       <small>${new Date(o.createdAt).toLocaleString()}</small>
-      <div class="row"><a href="tel:+${esc(wa(o))}">Call</a>
-      <a href="https://wa.me/${esc(wa(o))}" target="_blank" rel="noopener">WhatsApp</a>
+      <span class="tags">${o.via === 'plain' ? '<i class="tag warn">Chose no WhatsApp</i>' : '<i class="tag ok">WhatsApp opened</i>'}
+        ${o.mail === 'sent' ? '<i class="tag ok">Email sent</i>' : o.mail && o.mail !== 'pending' ? `<i class="tag warn" title="${esc(o.mail)}">Email: ${esc(o.mail)}</i>` : ''}</span>
+      <div class="row"><a href="tel:+${esc(num(o))}">Call</a>
+      <a href="https://wa.me/${esc(num(o))}" target="_blank" rel="noopener">WhatsApp</a>
       <a href="mailto:${esc(o.email)}">Email</a></div>
     </div>`).join('') : '<p>No orders yet.</p>';
 }

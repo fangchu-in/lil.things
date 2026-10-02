@@ -8,7 +8,7 @@ The site rebuilds by itself in about a minute. Any number of photos per category
 
 | Folder | Shows as |
 |---|---|
-| `diya-holders`, `bracelets`, `scrunchies`, `wallets-pouches`, `headbands`, `bags`, `tote-bags`, `hair-clips`, `leaf-bookmarks`, `coasters`, `loom-bands`, `painted-bottles`, `painted-rocks` | Card cover (first photo) and swipe gallery (all photos) |
+| `diya-holders`, `bracelets`, `scrunchies`, `wallets-pouches`, `headbands`, `bags`, `tote-bags`, `hair-clips`, `leaf-bookmarks`, `coasters`, `sunglass-covers`, `loom-bands`, `painted-bottles`, `painted-rocks` | Card cover (first photo) and swipe gallery (all photos) |
 | `strip` | The slideshow in the big photo frame at the top of the page (best with 4 to 8 photos; shown in file-name order) |
 
 - Photos are ordered by file name. Name them `1.jpg`, `2.jpg`, `3.jpg`... The **first one is the cover**, so make it the best.
@@ -29,17 +29,22 @@ Each category has its own share link with a preview picture and description, for
 `https://lil-things.pages.dev/share/bracelets/` (it opens the bracelets gallery). The Share button inside each gallery uses these links.
 `https://lil-things.pages.dev/#bracelets` also opens a gallery directly.
 
-## Orders
-- Customers fill the Order pop-up. The order is saved and a WhatsApp button lets them send you the details instantly. If saving ever fails, the form offers WhatsApp instead, so an order is never lost.
-- View all orders: https://lil-things.pages.dev/orders.html (needs the admin key).
-- Spam protection: hidden trap field, minimum fill time, same-site check and a rate limit.
+## Orders (three layers, so none is lost)
+1. **WhatsApp**: the main button saves the order and opens WhatsApp to 9766327697 with the details filled in. The customer just presses Send. (Customers without WhatsApp can use "send without it".)
+2. **Saved orders page**: https://lil-things.pages.dev/orders.html (needs the admin key). Each order shows if WhatsApp was opened and if the email went out.
+3. **Email via FormSubmit** (https://formsubmit.co): every order is also emailed to the address you activated there.
+
+Customers can be from any country: they pick a country code (or type the full number starting with +).
+Spam protection: hidden trap field, minimum fill time, same-site check and a rate limit.
 
 ## Cloudflare Pages setup (once)
 1. Pages project `lil-things` → Settings → Builds: **Build command** `npm run build`, **Build output directory** `dist`. Connect it to GitHub repo `fangchu-in/lil.things`, production branch `main`.
 2. Workers & Pages → Storage → **KV → Create namespace** called `lil-orders`.
 3. Pages project → Settings → **Bindings → Add → KV namespace**: variable name `ORDERS` → `lil-orders` (add it for Production).
 4. Settings → **Variables and Secrets → Add** a secret named `ADMIN_KEY` with a long password (this is the key for orders.html).
-5. Redeploy (Deployments → Retry) so the binding and key take effect.
+5. Add another secret `FORMSUBMIT_ID` = the random-like string FormSubmit emailed you after you confirmed your email (it replaces your email address in FormSubmit URLs).
+6. Redeploy (Deployments → Retry) so the binding and secrets take effect.
+7. Place one test order, then open `/orders.html`: the order should show an **Email sent** tag. If it says *Email: failed ...*, FormSubmit is not accepting the call from the server, so tell Claude.
 
 ## QR code
 `qr/lil-things-qr.png` (and `.svg` for sharp printing) points to https://lil-things.pages.dev/.

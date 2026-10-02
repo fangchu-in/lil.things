@@ -201,3 +201,14 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:0 0 0 4px rgba(2
 .dots i{width:.5rem;height:.5rem;border-radius:50%;background:#fff;border:1.5px solid var(--ink);opacity:.8}
 .dots i.on{background:var(--coral);opacity:1}
 @media(prefers-reduced-motion:reduce){.slides img{transition:none}}
+
+/* v3: phone field + WhatsApp-first order buttons */
+.field{display:grid;gap:.3rem;font-weight:700;min-width:0}
+.field>label{display:block}
+.phone{display:grid;grid-template-columns:7.6rem 1fr;gap:.5rem}
+.phone select{padding-inline:.45rem;font-size:.95rem}
+#orderForm .wa-btn{width:100%;font-size:1.1rem;padding:.9rem 1rem}
+.wa-hint{margin-top:-.4rem}
+.linkbtn{background:none;border:0;color:var(--ink);font:700 .95rem 'Nunito',sans-serif;text-decoration:underline;cursor:pointer;padding:.3rem;text-align:center}
+.linkbtn[disabled]{opacity:.5;pointer-events:none}
+@media(max-width:380px){.phone{grid-template-columns:1fr}}
