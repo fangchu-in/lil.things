@@ -6,6 +6,9 @@ window.SITE = {
   // WhatsApp number with country code, digits only
   whatsapp: '919766327697',
 
+  // FormSubmit form id (replaces the email address in FormSubmit links; safe to be public). Leave '' to turn the email layer off.
+  formsubmitId: '3eef430afbb3323ac2f996d71046c81e',
+
   makingTime: '3-14 days', // depends on the product chosen
 
   // Groups are the headings on the page. Categories appear in this order.

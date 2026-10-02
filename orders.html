@@ -53,7 +53,7 @@ async function load(key){
       <span>📍 ${esc(o.address)}, ${esc(o.city)} - ${esc(o.pin)}, ${esc(o.country)}</span>
       <small>${new Date(o.createdAt).toLocaleString()}</small>
       <span class="tags">${o.via === 'plain' ? '<i class="tag warn">Chose no WhatsApp</i>' : '<i class="tag ok">WhatsApp opened</i>'}
-        ${o.mail === 'sent' ? '<i class="tag ok">Email sent</i>' : o.mail && o.mail !== 'pending' ? `<i class="tag warn" title="${esc(o.mail)}">Email: ${esc(o.mail)}</i>` : ''}</span>
+        ${o.mail === 'sent' ? '<i class="tag ok">Email sent</i>' : o.mail ? `<i class="tag warn">Email: ${esc(o.mail)}</i>` : ''}</span>
       <div class="row"><a href="tel:+${esc(num(o))}">Call</a>
       <a href="https://wa.me/${esc(num(o))}" target="_blank" rel="noopener">WhatsApp</a>
       <a href="mailto:${esc(o.email)}">Email</a></div>

@@ -138,6 +138,37 @@ function fullNumber(raw, cc) {
   return { digits: d };
 }
 
+// Email layer: FormSubmit is called from the visitor's own browser (calling it from our server gets throttled: 429)
+async function emailOrder(o) {
+  if (!S.formsubmitId) return 'not configured';
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 6000);
+  try {
+    const r = await fetch(`https://formsubmit.co/ajax/${S.formsubmitId}`, {
+      method: 'POST', signal: ctl.signal,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        _subject: `New order: ${o.quantity} x ${o.product} (${o.name})`,
+        _template: 'table',
+        _captcha: 'false',
+        _honey: '',
+        order: `${o.quantity} x ${o.product}`,
+        colours_patterns: o.note || '-',
+        name: o.name,
+        mobile: `+${o.mobile}`,
+        email: o.email,
+        address: `${o.address}, ${o.city} - ${o.pin}, ${o.country}`,
+        customer_was_sent_to_whatsapp: o.via === 'whatsapp' ? 'yes' : 'no (chose without WhatsApp)',
+        received_at: new Date().toISOString(),
+      }),
+    });
+    const b = await r.json().catch(() => ({}));
+    return r.ok && String(b.success) !== 'false' ? 'sent' : `failed: ${r.status} ${String(b.message || '').slice(0, 80)}`.trim();
+  } catch (e) {
+    return e && e.name === 'AbortError' ? 'failed: timeout' : 'failed: network';
+  } finally { clearTimeout(t); }
+}
+
 function summary(d) {
   return [
     'Hi! I would like to place an order on Lil Things by Vaara.',
@@ -181,10 +212,12 @@ form.addEventListener('submit', async e => {
   sendBtn.disabled = plainBtn.disabled = true;
   sendBtn.textContent = 'Sending...';
   let saved = false;
+  order.mail = await emailOrder(order);            // layer: email (never blocks the order if it fails)
   try {
     const r = await fetch('/api/order', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(order) });
-    saved = r.ok;
+    saved = r.ok;                                   // layer: saved on /orders
   } catch {}
+  if (order.mail === 'sent') saved = true;          // the order reached us by email even if saving failed
   sendBtn.textContent = '💬 Send order on WhatsApp';
 
   const wa = $('doneWa');

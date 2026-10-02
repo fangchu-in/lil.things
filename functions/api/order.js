@@ -1,5 +1,5 @@
 // Cloudflare Pages Function
-// POST /api/order             -> saves the order (KV binding ORDERS) and emails it via FormSubmit (secret FORMSUBMIT_ID)
+// POST /api/order             -> saves the order (KV binding ORDERS). The page itself emails it via FormSubmit and reports the result in `mail`.
 // GET  /api/order  (header x-admin-key: SECRET) -> lists orders (SECRET = env var ADMIN_KEY)
 
 const json = (obj, status = 200) =>
@@ -10,36 +10,6 @@ const json = (obj, status = 200) =>
 
 const clean = (v, n) => String(v ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, n);
 const isIndia = c => /^\s*(india|bharat|in)\s*$/i.test(c);
-
-// Sends the order to the owner's email through FormSubmit. Never throws: returns 'sent' or 'failed: why'.
-async function emailOrder(env, o, siteOrigin) {
-  if (!env.FORMSUBMIT_ID) return 'not configured';
-  try {
-    const r = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(env.FORMSUBMIT_ID)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', Origin: siteOrigin, Referer: siteOrigin + '/' },
-      body: JSON.stringify({
-        _subject: `New order: ${o.quantity} x ${o.product} (${o.name})`,
-        _template: 'table',
-        _captcha: 'false',
-        order: `${o.quantity} x ${o.product}`,
-        colours_patterns: o.note || '-',
-        name: o.name,
-        mobile: `+${o.mobile}`,
-        email: o.email,
-        address: `${o.address}, ${o.city} - ${o.pin}, ${o.country}`,
-        sent_via_whatsapp: o.via === 'whatsapp' ? 'yes (customer was sent to WhatsApp)' : 'no (customer chose without WhatsApp)',
-        received_at: o.createdAt,
-      }),
-      signal: AbortSignal.timeout(7000),
-    });
-    const body = await r.json().catch(() => ({}));
-    if (r.ok && String(body.success) !== 'false') return 'sent';
-    return `failed: ${r.status} ${clean(body.message || '', 100)}`.trim();
-  } catch (e) {
-    return `failed: ${clean(e && e.message, 100)}`;
-  }
-}
 
 export async function onRequestPost({ request, env }) {
   // 1) Only accept orders sent from our own site
@@ -66,6 +36,7 @@ export async function onRequestPost({ request, env }) {
     pin: clean(d.pin, 12),
     country: clean(d.country, 60),
     via: d.via === 'plain' ? 'plain' : 'whatsapp',
+    mail: /^(sent|failed|not configured)/.test(String(d.mail || '')) ? clean(d.mail, 100) : '',
   };
 
   const ok =
@@ -74,35 +45,24 @@ export async function onRequestPost({ request, env }) {
     /^\d{8,15}$/.test(o.mobile) && (!o.mobile.startsWith('91') || o.mobile.length === 12) &&
     (isIndia(o.country) ? /^\d{6}$/.test(o.pin) : /^[A-Za-z0-9 -]{3,12}$/.test(o.pin));
   if (!ok) return json({ error: 'invalid' }, 400);
-  if (!env.ORDERS && !env.FORMSUBMIT_ID) return json({ error: 'storage not configured' }, 500);
+  if (!env.ORDERS) return json({ error: 'storage not configured' }, 500);
 
   // 3) Simple rate limit: one order per phone number / IP every 20 seconds
   const now = Date.now();
-  if (env.ORDERS) {
-    const ip = request.headers.get('cf-connecting-ip') || 'unknown';
-    for (const k of [`rl:ip:${ip}`, `rl:m:${o.mobile}`]) {
-      const last = Number(await env.ORDERS.get(k));
-      if (last && now - last < 20000) return json({ error: 'slow down' }, 429);
-    }
-    await Promise.all([
-      env.ORDERS.put(`rl:ip:${ip}`, String(now), { expirationTtl: 60 }),
-      env.ORDERS.put(`rl:m:${o.mobile}`, String(now), { expirationTtl: 60 }),
-    ]);
+  const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+  for (const k of [`rl:ip:${ip}`, `rl:m:${o.mobile}`]) {
+    const last = Number(await env.ORDERS.get(k));
+    if (last && now - last < 20000) return json({ error: 'slow down' }, 429);
   }
+  await Promise.all([
+    env.ORDERS.put(`rl:ip:${ip}`, String(now), { expirationTtl: 60 }),
+    env.ORDERS.put(`rl:m:${o.mobile}`, String(now), { expirationTtl: 60 }),
+  ]);
 
+  // 4) Save (shown on /orders)
   const createdAt = new Date(now).toISOString();
   const id = `order:${createdAt}_${crypto.randomUUID().slice(0, 8)}`;
-  const rec = { id, createdAt, ...o };
-
-  // 4) Layer 1: save to KV (shown on /orders). Layer 2: email through FormSubmit.
-  let saved = false;
-  if (env.ORDERS) {
-    try { await env.ORDERS.put(id, JSON.stringify({ ...rec, mail: 'pending' })); saved = true; } catch {}
-  }
-  const mail = await emailOrder(env, rec, new URL(request.url).origin);
-  if (saved) { try { await env.ORDERS.put(id, JSON.stringify({ ...rec, mail })); } catch {} }
-
-  if (!saved && mail !== 'sent') return json({ error: 'could not save' }, 500);
+  try { await env.ORDERS.put(id, JSON.stringify({ id, createdAt, ...o })); } catch { return json({ error: 'could not save' }, 500); }
   return json({ ok: true });
 }
 

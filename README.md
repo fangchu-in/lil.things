@@ -32,7 +32,7 @@ Each category has its own share link with a preview picture and description, for
 ## Orders (three layers, so none is lost)
 1. **WhatsApp**: the main button saves the order and opens WhatsApp to 9766327697 with the details filled in. The customer just presses Send. (Customers without WhatsApp can use "send without it".)
 2. **Saved orders page**: https://lil-things.pages.dev/orders.html (needs the admin key). Each order shows if WhatsApp was opened and if the email went out.
-3. **Email via FormSubmit** (https://formsubmit.co): every order is also emailed to the address you activated there.
+3. **Email via FormSubmit** (https://formsubmit.co): every order is also emailed to the address you activated there. The customer's browser sends it (FormSubmit throttles requests that come from Cloudflare's servers). The form id is `formsubmitId` in `assets/config.js`.
 
 Customers can be from any country: they pick a country code (or type the full number starting with +).
 Spam protection: hidden trap field, minimum fill time, same-site check and a rate limit.
@@ -42,9 +42,8 @@ Spam protection: hidden trap field, minimum fill time, same-site check and a rat
 2. Workers & Pages → Storage → **KV → Create namespace** called `lil-orders`.
 3. Pages project → Settings → **Bindings → Add → KV namespace**: variable name `ORDERS` → `lil-orders` (add it for Production).
 4. Settings → **Variables and Secrets → Add** a secret named `ADMIN_KEY` with a long password (this is the key for orders.html).
-5. Add another secret `FORMSUBMIT_ID` = the random-like string FormSubmit emailed you after you confirmed your email (it replaces your email address in FormSubmit URLs).
-6. Redeploy (Deployments → Retry) so the binding and secrets take effect.
-7. Place one test order, then open `/orders.html`: the order should show an **Email sent** tag. If it says *Email: failed ...*, FormSubmit is not accepting the call from the server, so tell Claude.
+5. Redeploy (Deployments → Retry) so the binding and secrets take effect.
+6. Place one test order, then open `/orders.html`: the order should show an **Email sent** tag and the email should arrive. If it says *Email: failed ...*, tell Claude what it says.
 
 ## QR code
 `qr/lil-things-qr.png` (and `.svg` for sharp printing) points to https://lil-things.pages.dev/.
