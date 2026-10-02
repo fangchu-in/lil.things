@@ -22,6 +22,7 @@
   .row{display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap}
   .row a{font-weight:700;color:var(--ink);border:2px solid var(--ink);border-radius:999px;padding:.3rem .9rem;text-decoration:none;background:#FFC93C}
   #count{font-weight:700}
+  .row button.del{background:#fff;color:#c0392b;border-color:#c0392b;box-shadow:none;padding:.3rem .9rem;font-size:1rem}
   .tags{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.3rem}
   .tag{font-style:normal;font-size:.8rem;font-weight:700;border-radius:999px;padding:.1rem .7rem;border:2px solid var(--ink)}
   .tag.ok{background:#bdf0d9}.tag.warn{background:#FFE0A3}
@@ -37,9 +38,11 @@
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = o => (!o.via && o.mobile.length === 10 ? '91' : '') + o.mobile; // very old orders had no country code
-async function load(key){
+let key = '';
+async function load(k){
+  key = k;
   $('msg').textContent = '';
-  const r = await fetch('/api/order', { headers: { 'x-admin-key': key } });
+  const r = await fetch('/api/order', { headers: { 'x-admin-key': k } });
   if (!r.ok) { $('msg').textContent = r.status === 401 ? 'Wrong key.' : 'Could not load orders.'; return; }
   const orders = await r.json();
   $('count').textContent = orders.length + (orders.length === 1 ? ' order' : ' orders');
@@ -56,9 +59,17 @@ async function load(key){
         ${o.mail === 'sent' ? '<i class="tag ok">Email sent</i>' : o.mail ? `<i class="tag warn">Email: ${esc(o.mail)}</i>` : ''}</span>
       <div class="row"><a href="tel:+${esc(num(o))}">Call</a>
       <a href="https://wa.me/${esc(num(o))}" target="_blank" rel="noopener">WhatsApp</a>
-      <a href="mailto:${esc(o.email)}">Email</a></div>
+      <a href="mailto:${esc(o.email)}">Email</a>
+      <button type="button" class="del" data-id="${esc(o.id)}" data-name="${esc(o.quantity)} x ${esc(o.product)} (${esc(o.name)})">Delete</button></div>
     </div>`).join('') : '<p>No orders yet.</p>';
 }
+$('list').onclick = async e => {
+  const b = e.target.closest('button.del'); if (!b) return;
+  if (!confirm('Delete this order?\n\n' + b.dataset.name + '\n\nThis cannot be undone.')) return;
+  b.disabled = true;
+  const r = await fetch('/api/order?id=' + encodeURIComponent(b.dataset.id), { method: 'DELETE', headers: { 'x-admin-key': key } });
+  if (r.ok) load(key); else { b.disabled = false; $('msg').textContent = 'Could not delete. Try again.'; }
+};
 $('f').onsubmit = e => { e.preventDefault(); load($('k').value.trim()); };
 </script>
 </body>

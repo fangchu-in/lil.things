@@ -1,6 +1,7 @@
 // Cloudflare Pages Function
 // POST /api/order             -> saves the order (KV binding ORDERS). The page itself emails it via FormSubmit and reports the result in `mail`.
 // GET  /api/order  (header x-admin-key: SECRET) -> lists orders (SECRET = env var ADMIN_KEY)
+// DELETE /api/order?id=order:... (header x-admin-key) -> deletes one order
 
 const json = (obj, status = 200) =>
   new Response(JSON.stringify(obj), {
@@ -75,4 +76,14 @@ export async function onRequestGet({ request, env }) {
   const orders = (await Promise.all(list.keys.map(k => env.ORDERS.get(k.name, 'json')))).filter(Boolean);
   orders.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return json(orders);
+}
+
+export async function onRequestDelete({ request, env }) {
+  const key = request.headers.get('x-admin-key');
+  if (!env.ADMIN_KEY || !key || key !== env.ADMIN_KEY) return json({ error: 'unauthorized' }, 401);
+  if (!env.ORDERS) return json({ error: 'storage not configured' }, 500);
+  const id = new URL(request.url).searchParams.get('id') || '';
+  if (!/^order:[\w:.\-]+$/.test(id)) return json({ error: 'bad id' }, 400); // only real orders, never rate-limit keys
+  await env.ORDERS.delete(id);
+  return json({ ok: true });
 }
