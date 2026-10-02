@@ -42,7 +42,23 @@
   .row button.go{padding:.3rem .9rem;font-size:1rem}
   .row button.sub{background:#fff;color:var(--ink);box-shadow:none;padding:.3rem .9rem;font-size:1rem}
   .ship{background:#F1E8FF;border-radius:10px;padding:.4rem .7rem}
-  dialog#sdlg{border:3px solid var(--ink);border-radius:18px;padding:1.1rem;width:min(94vw,460px);background:#fff}
+  .num{font-family:Fredoka,sans-serif;font-size:.85rem;background:var(--ink);color:#fff;border-radius:999px;padding:.05rem .6rem;margin-right:.4rem;vertical-align:middle}
+  .pay{display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:center;background:#EAF8F1;border-radius:10px;padding:.4rem .7rem}
+  .pay input.amt{flex:none;width:7rem;padding:.3rem .5rem;border-radius:8px;font-size:1rem}
+  .pay button{padding:.25rem .8rem;font-size:.9rem;background:#fff;color:var(--ink);box-shadow:none}
+  .pay .paidl{display:flex;gap:.35rem;align-items:center;font-weight:800;cursor:pointer}
+  .pay .paidl input{flex:none;width:1.2rem;height:1.2rem;accent-color:#1e8e5a}
+  .pay small{flex-basis:100%;opacity:.7}
+  #money{font-weight:700;margin:.1rem 0 .5rem}
+  dialog#sdlg,dialog#rdlg{border:3px solid var(--ink);border-radius:18px;padding:1.1rem;width:min(94vw,460px);background:#fff}
+  dialog#rdlg::backdrop{background:rgba(46,36,51,.6)}
+  #rdlg h2{font-family:Fredoka,sans-serif;margin:0 0 .6rem;font-size:1.3rem}
+  #rdlg label{display:block;font-weight:700;margin:.6rem 0 .2rem}
+  #rdlg select,#rdlg input{width:100%;font:inherit;padding:.6rem .8rem;border:2px solid var(--ink);border-radius:12px;background:#fff}
+  #rdlg small{opacity:.7;display:block;margin-top:.3rem}
+  #rdlg .btns{display:flex;gap:.5rem;justify-content:flex-end;margin-top:.8rem}
+  #rdlg .btns .sub{background:#fff;color:var(--ink);box-shadow:none}
+  #rErr{color:#c0392b;font-weight:700;min-height:1.2em;margin:.4rem 0 0}
   dialog#sdlg::backdrop{background:rgba(46,36,51,.6)}
   #sdlg h2{font-family:Fredoka,sans-serif;margin:0 0 .6rem;font-size:1.3rem}
   #sdlg label{display:block;font-weight:700;margin:.6rem 0 .2rem}
@@ -60,7 +76,8 @@
 <h1>🧶 Orders</h1>
 <form id="f"><input id="k" type="password" placeholder="Admin key" autocomplete="current-password"><button>View</button></form>
 <p id="msg"></p>
-<p id="count"></p>
+<p id="count" style="margin-bottom:.2rem"></p>
+<p id="money" hidden></p>
 <div class="chips" id="chips" hidden></div>
 <div id="list"></div>
 <dialog id="sdlg"><form method="dialog" id="sform" style="display:block" novalidate>
@@ -81,8 +98,22 @@
   <p id="sErr"></p>
   <div class="btns"><button type="button" class="sub" id="sCancel">Cancel</button><button type="submit" id="sOk">Save</button></div>
 </form></dialog>
+<dialog id="rdlg"><form method="dialog" id="rform" style="display:block" novalidate>
+  <h2>Resend an email</h2>
+  <label for="rKind">Which email?</label>
+  <select id="rKind"><option value="received">Order received</option><option value="dispatched">Dispatched (with courier details)</option><option value="delivered">Delivered</option></select>
+  <label for="rEmail">Send to</label>
+  <input id="rEmail" type="text" inputmode="email" autocomplete="off">
+  <small>If the address was wrong, fix it here. The corrected address is saved on the order.</small>
+  <p id="rErr"></p>
+  <div class="btns"><button type="button" class="sub" id="rCancel">Cancel</button><button type="submit" id="rOk">Send email</button></div>
+</form></dialog>
 <dialog id="pop"><div id="popBar"><span id="popTitle"></span><button type="button" id="popClose">Close</button></div><div id="popBody"></div></dialog>
+<script src="assets/config.js"></script>
 <script>
+const CUR = (window.SITE && SITE.currency) || '₹';
+const unitPrice = o => { const c = window.SITE && SITE.categories.find(x => x.name === o.product); return c && Number(c.price) > 0 ? Number(c.price) : 0; };
+const money = n => CUR + (Math.round(n * 100) / 100).toLocaleString('en-IN');
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num = o => (!o.via && o.mobile.length === 10 ? '91' : '') + o.mobile; // very old orders had no country code
@@ -106,8 +137,19 @@ function render(){
   $('chips').innerHTML = [['all', 'All'], ...Object.entries(STAT)].map(([k, n]) =>
     `<button type="button" class="chip${filter === k ? ' on' : ''}" data-f="${k}">${n} (${counts[k]})</button>`).join('');
   const list = filter === 'all' ? orders : orders.filter(o => st(o) === filter);
+  const billed = orders.reduce((n, o) => n + (o.amount || 0), 0), got = orders.reduce((n, o) => n + (o.paid ? (o.amount || 0) : 0), 0);
+  $('money').hidden = !billed;
+  $('money').textContent = billed ? `💰 Billed ${money(billed)} · Paid ${money(got)} · To collect ${money(billed - got)}` : '';
   $('count').textContent = orders.length ? list.length + (list.length === 1 ? ' order' : ' orders') : '';
   $('list').innerHTML = list.length ? list.map(card).join('') : `<p>${orders.length ? 'Nothing here.' : 'No orders yet.'}</p>`;
+}
+function payBlock(o){
+  const u = unitPrice(o), sug = u ? u * o.quantity : 0;
+  return `<div class="pay"><span>💰 Total ${esc(CUR)}<input class="amt" type="number" min="0" step="any" inputmode="decimal" value="${o.amount ?? ''}" placeholder="${sug || ''}" aria-label="Order total"></span>
+    <button type="button" data-a="amount">Save</button>
+    ${sug && o.amount == null ? `<button type="button" data-a="useSug" data-v="${sug}">Use ${esc(money(sug))}</button>` : ''}
+    <label class="paidl"><input type="checkbox" class="paid"${o.paid ? ' checked' : ''}> Paid</label>
+    ${sug ? `<small>Suggested: ${esc(o.quantity)} × ${esc(money(u))} = ${esc(money(sug))}</small>` : ''}</div>`;
 }
 function card(o){
   const s = st(o), sh = o.shipping, em = o.emails || {};
@@ -119,13 +161,14 @@ function card(o){
   }[s];
   return `
     <div class="o" data-id="${esc(o.id)}">
-      <div class="top"><b>${esc(o.quantity)} × ${esc(o.product)}</b><i class="st ${s}">${STAT[s]}</i></div>
+      <div class="top"><b>${o.num ? `<span class="num">#${esc(o.num)}</span>` : ''}${esc(o.quantity)} × ${esc(o.product)}</b><i class="st ${s}">${STAT[s]}</i></div>
       ${o.note ? `<span class="note">🎨 ${esc(o.note)}</span>` : ''}
       ${o.photo || o.page ? `<span>🖼️ <a class="pv" data-kind="${o.photo ? 'img' : 'page'}" href="${esc(o.photo || o.page)}" target="_blank" rel="noopener">${o.photo ? 'See the photo they liked' : 'See the product page'}</a>${o.photo && o.page ? ` · <a class="pv" data-kind="page" href="${esc(o.page)}" target="_blank" rel="noopener">product page</a>` : ''}</span>` : ''}
       <span>👤 ${esc(o.name)}</span>
       <span>📱 +${esc(num(o))}</span>
       <span>✉️ ${esc(o.email)}</span>
       <span>📍 ${esc(o.address)}, ${esc(o.city)} - ${esc(o.pin)}, ${esc(o.country)}</span>
+      ${payBlock(o)}
       ${sh && (s === 'dispatched' || s === 'delivered') ? `<span class="ship">${sh.mode === 'hand' ? '🤝 Hand delivery' : '📦 ' + esc(sh.courier || 'Courier')}${sh.url ? ` · <a href="${esc(sh.url)}" target="_blank" rel="noopener">tracking link</a>` : ''}${sh.note ? ` · ${esc(sh.note)}` : ''}</span>` : ''}
       <small>${new Date(o.createdAt).toLocaleString()}</small>
       <span class="tags">${o.via === 'plain' ? '<i class="tag warn">Chose no WhatsApp</i>' : '<i class="tag ok">WhatsApp opened</i>'}
@@ -134,6 +177,7 @@ function card(o){
       <div class="row">${act}<a href="tel:+${esc(num(o))}">Call</a>
       <a href="https://wa.me/${esc(num(o))}" target="_blank" rel="noopener">WhatsApp</a>
       <a href="mailto:${esc(o.email)}">Email</a>
+      <button type="button" class="sub" data-a="resend">Resend email</button>
       ${s !== 'pending' ? `<button type="button" class="sub" data-a="back">↩ Undo</button>` : ''}
       <button type="button" class="del" data-id="${esc(o.id)}" data-name="${esc(o.quantity)} x ${esc(o.product)} (${esc(o.name)})">Delete</button></div>
     </div>`;
@@ -180,6 +224,32 @@ function openStatus(id, action){
   $('sOk').textContent = disp ? 'Mark dispatched' : 'Mark delivered';
   sdlg.showModal();
 }
+$('list').addEventListener('change', async e => {
+  const c = e.target.closest('input.paid'); if (!c) return;
+  c.disabled = true;
+  const j = await change(c.closest('.o').dataset.id, { action: 'set', paid: c.checked });
+  if (j.err) { c.disabled = false; c.checked = !c.checked; return flash(j.err); }
+  flash(c.checked ? 'Marked as paid.' : 'Marked as not paid.', true); load();
+});
+const rdlg = $('rdlg');
+let resendId = '';
+function openResend(id){
+  const o = orders.find(x => x.id === id); if (!o) return;
+  resendId = id;
+  const s = st(o);
+  $('rKind').value = s === 'delivered' ? 'delivered' : s === 'dispatched' ? 'dispatched' : 'received';
+  $('rEmail').value = o.email; $('rErr').textContent = ''; $('rOk').disabled = false;
+  rdlg.showModal();
+}
+$('rCancel').onclick = () => rdlg.close();
+$('rform').onsubmit = async e => {
+  e.preventDefault();
+  $('rErr').textContent = ''; $('rOk').disabled = true;
+  const j = await change(resendId, { action: 'resend', kind: $('rKind').value, email: $('rEmail').value.trim() });
+  $('rOk').disabled = false;
+  if (j.err) { $('rErr').textContent = j.err; return; }
+  rdlg.close(); toast(j); load();
+};
 $('chips').onclick = e => { const b = e.target.closest('.chip'); if (b) { filter = b.dataset.f; render(); } };
 
 const pop = $('pop');
@@ -201,6 +271,14 @@ $('list').onclick = async e => {
   const g = e.target.closest('button[data-a]');
   if (g) {
     const id = g.closest('.o').dataset.id, a = g.dataset.a;
+    if (a === 'amount' || a === 'useSug') {
+      const v = a === 'useSug' ? g.dataset.v : g.closest('.pay').querySelector('.amt').value.trim();
+      g.disabled = true;
+      const j = await change(id, { action: 'set', amount: v });
+      if (j.err) { g.disabled = false; return flash(j.err); }
+      flash('Total saved.', true); return load();
+    }
+    if (a === 'resend') return openResend(id);
     if (a === 'dispatched' || a === 'delivered') return openStatus(id, a);
     if (a === 'back' && !confirm('Move this order back one step? (No email is sent.)')) return;
     g.disabled = true;

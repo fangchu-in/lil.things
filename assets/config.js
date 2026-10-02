@@ -11,6 +11,8 @@ window.SITE = {
   notifyCc: 'poojabanwari@gmail.com,vaara@ektitli.org',
   formsubmitId: '3eef430afbb3323ac2f996d71046c81e',
 
+  currency: '₹',
+
   makingTime: '3-14 days', // depends on the product chosen
 
   // Groups are the headings on the page. Categories appear in this order.
@@ -19,6 +21,7 @@ window.SITE = {
     { id: 'loom',    title: 'Loom & painted', emoji: '🎨' },
   ],
 
+  // Optional per category:  price: 150   (only used on /orders.html, as a suggested total = price x quantity)
   // "id" must match the folder name inside /images
   // "group" must match a group id above.
   categories: [

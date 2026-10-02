@@ -227,11 +227,12 @@ form.addEventListener('submit', async e => {
 
   sendBtn.disabled = plainBtn.disabled = true;
   sendBtn.textContent = 'Sending...';
-  let saved = false;
+  let saved = false, orderNum = 0;
   order.mail = await emailOrder(order);            // layer: email (never blocks the order if it fails)
   try {
     const r = await fetch('/api/order', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(order) });
     saved = r.ok;                                   // layer: saved on /orders
+    if (r.ok) { const j = await r.json().catch(() => ({})); orderNum = Number(j.num) || 0; }
   } catch {}
   if (order.mail === 'sent') saved = true;          // the order reached us by email even if saving failed
   sendBtn.textContent = '💬 Send order on WhatsApp';
@@ -255,6 +256,7 @@ form.addEventListener('submit', async e => {
     if (S.whatsapp) { const a = el('a', 'btn wa-btn', '💬 Send order on WhatsApp'); a.href = waUrl; a.target = '_blank'; a.rel = 'noopener'; $('waFallback').append(a); }
     return;
   }
+  if (orderNum) $('doneText').textContent += ` Your order number is #${orderNum}.`;
   $('oFormWrap').hidden = true; $('oDone').hidden = false;
   dlg.scrollTop = 0;
   form.reset(); form.country.value = 'India'; ccSel.value = '91'; form.quantity.value = 1;

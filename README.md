@@ -45,12 +45,18 @@ On `/orders.html` every order has a status: **Pending → Processing → Dispatc
 - **Undo** moves an order back one step (no email). The customer also gets an automatic "we got your order" email when they order.
 - Copies of the emails to the customer also go to the addresses in `MAIL_CC` (default in `functions/_lib/mail.js`). Copies of new-order emails to you go to `notifyCc` in `assets/config.js`.
 
+### Order numbers, prices and paid
+- Every order gets a number (#1001, #1002, ...). Customers see it on the thank-you screen and in their emails.
+- **Total / Paid**: type the total for an order and press Save, then tick **Paid** when the money has arrived. The top of the page shows Billed, Paid and To collect.
+- **Prices**: give a category a price in `assets/config.js` (e.g. `price: 120`) and each order shows "Suggested: 2 × ₹120 = ₹240" with a **Use ₹240** button. The price is only a suggestion on this page; you can always type a different total.
+- **Resend email**: pick which email (received / dispatched / delivered) and the address to send to. If the customer's address was wrong, correct it there; the corrected address is saved on the order.
+
 ### Switch on customer emails (once, free)
 FormSubmit can only email you, so customer emails use Brevo (free: 300 emails a day).
 1. Sign up at https://www.brevo.com.
-2. Brevo → **Senders, domains & dedicated IPs → Senders → Add a sender**: `vaara@ektitli.org`, then click the verification link Brevo emails there.
+2. Brevo → **Senders, domains & dedicated IPs → Senders → Add a sender** (the address that will send the emails; the site is set up for `fangchu@gmail.com`; to use another, set `MAIL_FROM`), then click the verification link Brevo emails there.
 3. Brevo → **SMTP & API → API keys → Generate a new API key**. Copy it.
-4. Cloudflare → Pages project → Settings → Variables and Secrets → add a **secret** `BREVO_API_KEY` with that key. Optional plain variables: `MAIL_FROM` (default `vaara@ektitli.org`) and `MAIL_CC` (comma separated, default `poojabanwari@gmail.com,vaara@ektitli.org`).
+4. Cloudflare → Pages project → Settings → Variables and Secrets → add a **secret** `BREVO_API_KEY` with that key. Optional plain variables: `MAIL_FROM` (the verified sender, default `fangchu@gmail.com`), `MAIL_REPLY_TO` (where customer replies go, default `vaara@ektitli.org`) and `MAIL_CC` (comma separated, default `poojabanwari@gmail.com,vaara@ektitli.org`).
 5. Redeploy (Deployments → Retry). Place a test order: the customer address should receive "We got your order", and `/orders.html` shows **Customer: order received: sent**.
 Until the key is added nothing breaks: statuses work and the page says customer emails are not switched on.
 If customer emails land in spam, in Brevo also **authenticate the domain** `ektitli.org` (adds DNS records).

@@ -1,7 +1,10 @@
 // Cloudflare Pages Function
 // POST /api/order             -> saves the order (KV binding ORDERS). The page itself emails it via FormSubmit and reports the result in `mail`.
 // GET  /api/order  (header x-admin-key: SECRET) -> lists orders (SECRET = env var ADMIN_KEY)
-// PATCH /api/order (header x-admin-key) body {id, action: processing|dispatched|delivered|back, mode, url, courier, note, notify} -> moves an order along and emails the customer
+// PATCH /api/order (header x-admin-key) body {id, action} where action is
+//   processing | dispatched | delivered | back   -> moves an order along (dispatched/delivered email the customer)
+//   set     {amount, paid}                       -> total price and paid tick
+//   resend  {kind: received|dispatched|delivered, email?} -> sends a customer email again (can fix the address)
 // DELETE /api/order?id=order:... (header x-admin-key) -> deletes one order
 
 import { sendCustomerEmail, safeUrl } from '../_lib/mail.js';
@@ -70,7 +73,11 @@ export async function onRequestPost({ request, env, waitUntil }) {
   // 4) Save (shown on /orders)
   const createdAt = new Date(now).toISOString();
   const id = `order:${createdAt}_${crypto.randomUUID().slice(0, 8)}`;
-  const rec = { id, createdAt, ...o, status: 'pending', history: [{ s: 'pending', at: createdAt }], emails: {} };
+  // Order number: 1001, 1002, ... (simple counter). Once, number the orders that came before numbers existed, so new ones follow them.
+  try { if (!(await env.ORDERS.get('meta:legacyDone'))) { await loadOrders(env); await env.ORDERS.put('meta:legacyDone', '1'); } } catch {}
+  let num = (Number(await env.ORDERS.get('meta:counter')) || 1000) + 1;
+  try { await env.ORDERS.put('meta:counter', String(num)); } catch { num = 0; }
+  const rec = { id, num: num || undefined, createdAt, ...o, status: 'pending', history: [{ s: 'pending', at: createdAt }], emails: {} };
   try { await env.ORDERS.put(id, JSON.stringify(rec)); } catch { return json({ error: 'could not save' }, 500); }
 
   // Email the customer "we got your order" in the background (never delays or breaks the order)
@@ -79,7 +86,20 @@ export async function onRequestPost({ request, env, waitUntil }) {
     try { const cur = (await env.ORDERS.get(id, 'json')) || rec; cur.emails = { ...cur.emails, received: res }; await env.ORDERS.put(id, JSON.stringify(cur)); } catch {}
   });
   if (waitUntil) waitUntil(job); else await job;
-  return json({ ok: true });
+  return json({ ok: true, num: rec.num });
+}
+
+// Reads all orders. Any order without a number gets one now (oldest first).
+async function loadOrders(env) {
+  const list = await env.ORDERS.list({ prefix: 'order:', limit: 1000 });
+  const orders = (await Promise.all(list.keys.map(k => env.ORDERS.get(k.name, 'json')))).filter(Boolean);
+  const missing = orders.filter(o => !o.num).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  if (missing.length) {
+    let n = Number(await env.ORDERS.get('meta:counter')) || 1000;
+    for (const o of missing) { o.num = ++n; await env.ORDERS.put(o.id, JSON.stringify(o)); }
+    await env.ORDERS.put('meta:counter', String(n));
+  }
+  return orders;
 }
 
 export async function onRequestGet({ request, env }) {
@@ -87,8 +107,7 @@ export async function onRequestGet({ request, env }) {
   if (!env.ADMIN_KEY || !key || key !== env.ADMIN_KEY) return json({ error: 'unauthorized' }, 401);
   if (!env.ORDERS) return json({ error: 'storage not configured' }, 500);
 
-  const list = await env.ORDERS.list({ prefix: 'order:', limit: 1000 });
-  const orders = (await Promise.all(list.keys.map(k => env.ORDERS.get(k.name, 'json')))).filter(Boolean);
+  const orders = await loadOrders(env);
   orders.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return json(orders);
 }
@@ -104,6 +123,8 @@ export async function onRequestDelete({ request, env }) {
 }
 
 const STEPS = ['pending', 'processing', 'dispatched', 'delivered'];
+const KINDS = ['received', 'dispatched', 'delivered'];
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export async function onRequestPatch({ request, env }) {
   const key = request.headers.get('x-admin-key');
@@ -114,7 +135,40 @@ export async function onRequestPatch({ request, env }) {
   if (!d || !/^order:[\w:.\-]+$/.test(String(d.id || ''))) return json({ error: 'bad id' }, 400);
   const rec = await env.ORDERS.get(d.id, 'json');
   if (!rec) return json({ error: 'not found' }, 404);
+  const site = new URL(request.url).origin;
+  const save = () => env.ORDERS.put(d.id, JSON.stringify(rec));
 
+  // --- price and paid tick
+  if (d.action === 'set') {
+    if ('amount' in d) {
+      if (d.amount === '' || d.amount === null) delete rec.amount;
+      else {
+        const n = Number(d.amount);
+        if (!Number.isFinite(n) || n < 0 || n > 10000000) return json({ error: 'Please enter a valid amount.' }, 400);
+        rec.amount = Math.round(n * 100) / 100;
+      }
+    }
+    if ('paid' in d) { rec.paid = !!d.paid; if (rec.paid) rec.paidAt = new Date().toISOString(); else delete rec.paidAt; }
+    await save();
+    return json({ ok: true, order: rec });
+  }
+
+  // --- send a customer email again (optionally with a corrected address)
+  if (d.action === 'resend') {
+    if (!KINDS.includes(d.kind)) return json({ error: 'bad email type' }, 400);
+    if (d.email !== undefined) {
+      const e = clean(d.email, 120);
+      if (!EMAIL_RE.test(e)) return json({ error: 'Please enter a valid email address.' }, 400);
+      rec.email = e;
+    }
+    if (d.kind === 'dispatched' && !rec.shipping) return json({ error: 'Dispatch the order first, so the email has the courier details.' }, 400);
+    const email = await sendCustomerEmail(env, d.kind, rec, site);
+    rec.emails = { ...(rec.emails || {}), [d.kind]: email };
+    await save();
+    return json({ ok: true, order: rec, email });
+  }
+
+  // --- move along: processing / dispatched / delivered / back
   const cur = STEPS.includes(rec.status) ? rec.status : 'pending';
   let next;
   if (d.action === 'back') { if (cur === 'pending') return json({ error: 'already at start' }, 400); next = STEPS[STEPS.indexOf(cur) - 1]; }
@@ -132,9 +186,9 @@ export async function onRequestPatch({ request, env }) {
 
   let email = null;
   if (d.action !== 'back' && (next === 'dispatched' || next === 'delivered') && d.notify !== false) {
-    email = await sendCustomerEmail(env, next, rec, new URL(request.url).origin);
+    email = await sendCustomerEmail(env, next, rec, site);
     rec.emails = { ...(rec.emails || {}), [next]: email };
   }
-  await env.ORDERS.put(d.id, JSON.stringify(rec));
+  await save();
   return json({ ok: true, order: rec, email });
 }
