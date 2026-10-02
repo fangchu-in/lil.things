@@ -1,0 +1,12 @@
+{
+  "name": "little-little-things",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs && npx serve dist"
+  },
+  "dependencies": {
+    "sharp": "^0.34.0"
+  }
+}

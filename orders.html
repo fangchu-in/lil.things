@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Orders</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#2E2433;--bg:#FFF9F1;--coral:#FF6F61}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Nunito,sans-serif;background:var(--bg);color:var(--ink);padding:1.25rem;max-width:760px;margin-inline:auto}
+  h1{font-family:Fredoka,sans-serif;margin:.5rem 0 1rem}
+  form{display:flex;gap:.5rem}
+  input{flex:1;font:inherit;padding:.7rem .9rem;border:2px solid var(--ink);border-radius:12px;background:#fff}
+  button{font:700 1rem Nunito;padding:.7rem 1.2rem;border:2px solid var(--ink);border-radius:999px;background:var(--coral);color:#fff;box-shadow:0 3px 0 var(--ink);cursor:pointer}
+  #msg{color:#c0392b;font-weight:700;min-height:1.4em}
+  .o{background:#fff;border:2px solid var(--ink);border-radius:16px;padding:1rem;margin:.8rem 0;display:grid;gap:.2rem}
+  .o b{font-family:Fredoka;font-size:1.15rem}
+  .o small{opacity:.65}
+  .note{background:#FFF3C4;border-radius:10px;padding:.4rem .7rem}
+  .row{display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap}
+  .row a{font-weight:700;color:var(--ink);border:2px solid var(--ink);border-radius:999px;padding:.3rem .9rem;text-decoration:none;background:#FFC93C}
+  #count{font-weight:700}
+</style>
+</head>
+<body>
+<h1>🧶 Orders</h1>
+<form id="f"><input id="k" type="password" placeholder="Admin key" autocomplete="current-password"><button>View</button></form>
+<p id="msg"></p>
+<p id="count"></p>
+<div id="list"></div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const wa = o => (/^\s*(india|bharat|in)\s*$/i.test(o.country) && o.mobile.length === 10 ? '91' : '') + o.mobile;
+async function load(key){
+  $('msg').textContent = '';
+  const r = await fetch('/api/order', { headers: { 'x-admin-key': key } });
+  if (!r.ok) { $('msg').textContent = r.status === 401 ? 'Wrong key.' : 'Could not load orders.'; return; }
+  const orders = await r.json();
+  $('count').textContent = orders.length + (orders.length === 1 ? ' order' : ' orders');
+  $('list').innerHTML = orders.length ? orders.map(o => `
+    <div class="o">
+      <b>${esc(o.quantity)} × ${esc(o.product)}</b>
+      ${o.note ? `<span class="note">🎨 ${esc(o.note)}</span>` : ''}
+      <span>👤 ${esc(o.name)}</span>
+      <span>📱 ${esc(o.mobile)}</span>
+      <span>✉️ ${esc(o.email)}</span>
+      <span>📍 ${esc(o.address)}, ${esc(o.city)} - ${esc(o.pin)}, ${esc(o.country)}</span>
+      <small>${new Date(o.createdAt).toLocaleString()}</small>
+      <div class="row"><a href="tel:+${esc(wa(o))}">Call</a>
+      <a href="https://wa.me/${esc(wa(o))}" target="_blank" rel="noopener">WhatsApp</a>
+      <a href="mailto:${esc(o.email)}">Email</a></div>
+    </div>`).join('') : '<p>No orders yet.</p>';
+}
+$('f').onsubmit = e => { e.preventDefault(); load($('k').value.trim()); };
+</script>
+</body>
+</html>
