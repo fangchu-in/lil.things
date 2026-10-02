@@ -8,7 +8,7 @@ The site rebuilds by itself in about a minute. Any number of photos per category
 
 | Folder | Shows as |
 |---|---|
-| `diya-holders`, `bracelets`, `scrunchies`, `wallets-pouches`, `headbands`, `bags`, `loom-bands`, `painted-bottles`, `painted-rocks` | Card cover (first photo), swipe gallery (all photos), scrolling strip |
+| `diya-holders`, `bracelets`, `scrunchies`, `wallets-pouches`, `headbands`, `bags`, `tote-bags`, `hair-clips`, `leaf-bookmarks`, `coasters`, `loom-bands`, `painted-bottles`, `painted-rocks` | Card cover (first photo), swipe gallery (all photos), scrolling strip |
 | `strip` | Extra photos only for the scrolling strip |
 
 - Photos are ordered by file name. Name them `1.jpg`, `2.jpg`, `3.jpg`... The **first one is the cover**, so make it the best.
@@ -20,9 +20,9 @@ The site rebuilds by itself in about a minute. Any number of photos per category
 - Names, descriptions, WhatsApp number, making time, categories: `assets/config.js`
 - Vaara's story and "things I love": the `story` section of `index.html`
 
-### Add a category (e.g. coasters, bows)
+### Add a category (e.g. bows)
 1. Open `assets/config.js`, find the two commented examples at the bottom of `categories`, remove the `//` at the start of one line and edit the words.
-2. Create the photo folder: GitHub → Add file → Create new file → type `images/coasters/.gitkeep` → Commit. Then upload photos into it.
+2. Create the photo folder: GitHub → Add file → Create new file → type `images/bows/.gitkeep` → Commit. Then upload photos into it.
 
 ## Sharing
 Each category has its own share link with a preview picture and description, for example
