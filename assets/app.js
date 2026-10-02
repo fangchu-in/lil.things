@@ -16,6 +16,7 @@ function img(src, alt, emoji, eager) {
 }
 
 async function loadPhotos() {
+  if (window.__PHOTOS__) return window.__PHOTOS__; // inlined by the build for speed
   try { const r = await fetch('photos.json', { cache: 'no-cache' }); if (r.ok) return await r.json(); } catch {}
   return { categories: {}, strip: [] };
 }
@@ -162,7 +163,30 @@ form.addEventListener('submit', async e => {
   }
 });
 
-// ---------- page content (needs photos.json) ----------
+// ---------- hero slideshow (photos are already in the HTML, built at deploy time) ----------
+function initSlideshow() {
+  const wrap = $('heroSlides');
+  const imgs = wrap ? [...wrap.querySelectorAll('img')] : [];
+  if (imgs.length < 2) return;
+  const dots = el('div', 'dots');
+  dots.setAttribute('aria-hidden', 'true');
+  imgs.forEach(() => dots.append(document.createElement('i')));
+  $('heroCard').append(dots);
+  let i = 0, timer = null;
+  const show = n => {
+    i = (n + imgs.length) % imgs.length;
+    imgs.forEach((m, k) => m.classList.toggle('on', k === i));
+    [...dots.children].forEach((d, k) => d.classList.toggle('on', k === i));
+  };
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const start = () => { if (!reduce && !timer) timer = setInterval(() => show(i + 1), 3500); };
+  const stop = () => { clearInterval(timer); timer = null; };
+  show(0); start();
+  $('heroCard').addEventListener('click', () => { stop(); show(i + 1); start(); });
+  document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
+}
+
+// ---------- page content ----------
 (async () => {
   const P = await loadPhotos();
   const groupsEl = $('groups');
@@ -199,25 +223,7 @@ form.addEventListener('submit', async e => {
     groupsEl.append(sec);
   });
 
-  // Scrolling strip: every photo, interleaved so categories mix
-  let items = [];
-  const lists = [
-    ...Object.entries(P.categories).map(([id, l]) => {
-      const c = byId(id);
-      return l.map(p => ({ src: p.thumb, alt: c ? c.name : "Vaara's work", emoji: c ? c.emoji : '🧶' }));
-    }),
-    (P.strip || []).map(p => ({ src: p.thumb, alt: "Vaara's work", emoji: '🧶' })),
-  ].filter(l => l.length);
-  for (let i = 0; lists.some(l => i < l.length); i++) lists.forEach(l => { if (i < l.length) items.push(l[i]); });
-  if (!items.length) items = S.categories.map(c => ({ src: '', alt: c.name, emoji: c.emoji }));
-  while (items.length < 10) items = items.concat(items);
-  const track = $('track');
-  track.style.setProperty('--dur', `${Math.max(30, items.length * 3)}s`);
-  [...items, ...items].forEach(s => {
-    const d = el('div', 'slide');
-    d.append(s.src ? img(s.src, s.alt, s.emoji) : ph(s.emoji));
-    track.append(d);
-  });
+  initSlideshow();
 
   // Deep links: /#bracelets opens that gallery
   const openFromHash = () => {

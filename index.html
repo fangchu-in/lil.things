@@ -18,6 +18,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/style.css">
+<!--PRELOAD-->
 </head>
 <body id="top">
 
@@ -43,8 +44,9 @@
     </div>
   </div>
   <div class="hero-img">
-    <div class="art-card" aria-hidden="true">
-      <svg viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
+    <div class="art-card<!--HERO_CLASS-->" id="heroCard">
+      <div class="slides" id="heroSlides"><!--HERO_SLIDES--></div>
+      <svg class="yarn" aria-hidden="true" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
         <path d="M172 188 C 200 200, 214 176, 232 196" fill="none" stroke="#2E2433" stroke-width="5" stroke-linecap="round"/>
         <circle cx="116" cy="124" r="86" fill="#FF8FB1" stroke="#2E2433" stroke-width="5"/>
         <g fill="none" stroke="#2E2433" stroke-width="4" stroke-linecap="round" opacity=".85">
@@ -66,10 +68,6 @@
     <span class="sticker s3" aria-hidden="true">🌈</span>
     <p class="note-tag">made by me!</p>
   </div>
-</section>
-
-<section class="strip" aria-label="Photos of Vaara's work" id="stripSection">
-  <div class="track" id="track"></div>
 </section>
 
 <section class="story" id="story">
@@ -214,7 +212,8 @@
   </div>
 </dialog>
 
+<!--PHOTOS-->
 <script src="assets/config.js"></script>
-<script src="assets/app.js"></script>
+<script src="assets/app.js" defer></script>
 </body>
 </html>

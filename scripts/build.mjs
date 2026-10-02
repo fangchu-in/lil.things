@@ -38,13 +38,15 @@ async function processImage(srcFile, outDir, base) {
   if (!sharp || ext === '.gif') {
     const name = base + ext;
     await copyFile(srcFile, path.join(outDir, name));
-    return { full: name, thumb: name };
+    return { full: name, med: name, thumb: name };
   }
-  const full = `${base}.webp`, thumb = `${base}-t.webp`;
+  const full = `${base}.webp`, med = `${base}-m.webp`, thumb = `${base}-t.webp`;
   const img = () => sharp(srcFile, { failOn: 'none' }).rotate();
-  await img().resize({ width: 1400, height: 1400, fit: 'inside', withoutEnlargement: true }).webp({ quality: 80 }).toFile(path.join(outDir, full));
-  await img().resize({ width: 640, height: 640, fit: 'cover' }).webp({ quality: 72 }).toFile(path.join(outDir, thumb));
-  return { full, thumb };
+  // full: gallery · med: top slideshow · thumb: category cards (small = fast on mobile data)
+  await img().resize({ width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true }).webp({ quality: 78 }).toFile(path.join(outDir, full));
+  await img().resize({ width: 800, height: 800, fit: 'cover' }).webp({ quality: 74 }).toFile(path.join(outDir, med));
+  await img().resize({ width: 480, height: 480, fit: 'cover' }).webp({ quality: 70 }).toFile(path.join(outDir, thumb));
+  return { full, med, thumb };
 }
 
 const manifest = { categories: {}, strip: [] };
@@ -61,13 +63,27 @@ for (const e of entries.filter(x => x.isDirectory()).sort((a, b) => natural(a.na
     used.add(base);
     try {
       const r = await processImage(path.join(p, f), path.join(DIST, 'images', e.name), base);
-      list.push({ src: `images/${e.name}/${r.full}`, thumb: `images/${e.name}/${r.thumb}` });
+      list.push({ src: `images/${e.name}/${r.full}`, med: `images/${e.name}/${r.med}`, thumb: `images/${e.name}/${r.thumb}` });
       if (!firstFile[e.name]) firstFile[e.name] = path.join(p, f);
     } catch (err) { console.warn(`! skipped ${e.name}/${f}: ${err.message}`); }
   }
   if (e.name === 'strip') manifest.strip = list; else manifest.categories[e.name] = list;
 }
 await writeFile(path.join(DIST, 'photos.json'), JSON.stringify(manifest));
+
+// ---- Bake photos into index.html so the page needs no extra requests to show them ----
+{
+  const file = path.join(DIST, 'index.html');
+  let html = await readFile(file, 'utf8');
+  const hero = manifest.strip.slice(0, 8);
+  const slides = hero.map((p, i) => `<img src="${p.med}" alt="Handmade creation by Vaara" width="800" height="800" decoding="async"${i === 0 ? ' class="on" fetchpriority="high"' : ' loading="lazy"'}>`).join('');
+  html = html
+    .replace('<!--HERO_CLASS-->', hero.length ? ' has-photos' : '')
+    .replace('<!--HERO_SLIDES-->', slides)
+    .replace('<!--PRELOAD-->', hero.length ? `<link rel="preload" as="image" href="${hero[0].med}" fetchpriority="high">` : '')
+    .replace('<!--PHOTOS-->', `<script>window.__PHOTOS__=${JSON.stringify(manifest).replace(/</g, '\\u003c')}</script>`);
+  await writeFile(file, html);
+}
 
 // ---- Preview pictures (1200x630) + share pages ----
 const OG_W = 1200, OG_H = 630;
