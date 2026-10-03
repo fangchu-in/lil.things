@@ -2,9 +2,10 @@
 // POST /api/order             -> saves the order (KV binding ORDERS). The page itself emails it via FormSubmit and reports the result in `mail`.
 // GET  /api/order  (header x-admin-key: SECRET) -> lists orders (SECRET = env var ADMIN_KEY)
 // PATCH /api/order (header x-admin-key) body {id, action} where action is
-//   processing | dispatched | delivered | back   -> moves an order along (dispatched/delivered email the customer)
-//   set     {amount, paid}                       -> total price and paid tick
-//   resend  {kind: received|dispatched|delivered, email?} -> sends a customer email again (can fix the address)
+//   processing {amount, shipCost, note, notify}  -> confirms the order: saves price + shipping and emails the final details
+//   dispatched {mode, url, courier, note, notify} | delivered {notify} | back
+//   set     {amount, shipCost, paid}             -> items price, shipping cost, paid tick
+//   resend  {kind: received|processing|dispatched|delivered, email?} -> sends a customer email again (can fix the address)
 // DELETE /api/order?id=order:... (header x-admin-key) -> deletes one order
 
 import { sendCustomerEmail, safeUrl } from '../_lib/mail.js';
@@ -18,6 +19,7 @@ const json = (obj, status = 200) =>
 const clean = (v, n) => String(v ?? '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, n);
 // only keep links that point at this same site
 const refUrl = (v, req) => { try { const u = new URL(String(v || '')); return u.host === new URL(req.url).host ? u.href.slice(0, 300) : ''; } catch { return ''; } };
+const pn = v => { const n = Number(v); return Number.isFinite(n) && n > 0 && n <= 100000 ? n : 0; };
 const isIndia = c => /^\s*(india|bharat|in)\s*$/i.test(c);
 
 export async function onRequestPost({ request, env, waitUntil }) {
@@ -46,6 +48,8 @@ export async function onRequestPost({ request, env, waitUntil }) {
     country: clean(d.country, 60),
     photo: refUrl(d.photo, request),
     page: refUrl(d.page, request),
+    unitMin: pn(d.price),
+    unitMax: pn(d.priceMax) > pn(d.price) ? pn(d.priceMax) : 0,
     via: d.via === 'plain' ? 'plain' : 'whatsapp',
     mail: /^(sent|failed|not configured)/.test(String(d.mail || '')) ? clean(d.mail, 100) : '',
   };
@@ -123,7 +127,20 @@ export async function onRequestDelete({ request, env }) {
 }
 
 const STEPS = ['pending', 'processing', 'dispatched', 'delivered'];
-const KINDS = ['received', 'dispatched', 'delivered'];
+const KINDS = ['received', 'processing', 'dispatched', 'delivered'];
+// '' / null -> null (clear), undefined -> undefined (not sent), invalid -> NaN
+const money = v => { if (v === undefined) return undefined; if (v === '' || v === null) return null; const n = Number(v); return Number.isFinite(n) && n >= 0 && n <= 10000000 ? Math.round(n * 100) / 100 : NaN; };
+const hasPrices = r => typeof r.amount === 'number' && typeof r.shipCost === 'number';
+// applies amount / shipCost from a request to the record; returns an error string or ''
+function applyMoney(rec, d) {
+  for (const k of ['amount', 'shipCost']) {
+    if (!(k in d)) continue;
+    const m = money(d[k]);
+    if (Number.isNaN(m)) return 'Please enter valid amounts.';
+    if (m === null) delete rec[k]; else rec[k] = m;
+  }
+  return '';
+}
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export async function onRequestPatch({ request, env }) {
@@ -140,14 +157,8 @@ export async function onRequestPatch({ request, env }) {
 
   // --- price and paid tick
   if (d.action === 'set') {
-    if ('amount' in d) {
-      if (d.amount === '' || d.amount === null) delete rec.amount;
-      else {
-        const n = Number(d.amount);
-        if (!Number.isFinite(n) || n < 0 || n > 10000000) return json({ error: 'Please enter a valid amount.' }, 400);
-        rec.amount = Math.round(n * 100) / 100;
-      }
-    }
+    const bad = applyMoney(rec, d);
+    if (bad) return json({ error: bad }, 400);
     if ('paid' in d) { rec.paid = !!d.paid; if (rec.paid) rec.paidAt = new Date().toISOString(); else delete rec.paidAt; }
     await save();
     return json({ ok: true, order: rec });
@@ -161,6 +172,7 @@ export async function onRequestPatch({ request, env }) {
       if (!EMAIL_RE.test(e)) return json({ error: 'Please enter a valid email address.' }, 400);
       rec.email = e;
     }
+    if (d.kind === 'processing' && !hasPrices(rec)) return json({ error: 'Enter the price and the shipping cost first (use Confirm order).' }, 400);
     if (d.kind === 'dispatched' && !rec.shipping) return json({ error: 'Dispatch the order first, so the email has the courier details.' }, 400);
     const email = await sendCustomerEmail(env, d.kind, rec, site);
     rec.emails = { ...(rec.emails || {}), [d.kind]: email };
@@ -175,6 +187,12 @@ export async function onRequestPatch({ request, env }) {
   else if (['processing', 'dispatched', 'delivered'].includes(d.action)) next = d.action;
   else return json({ error: 'bad action' }, 400);
 
+  if (d.action === 'processing') {
+    const bad = applyMoney(rec, d);
+    if (bad) return json({ error: bad }, 400);
+    if ('note' in d) rec.confirmNote = clean(d.note, 300);
+    if (d.notify !== false && !hasPrices(rec)) return json({ error: 'Please enter the items total and the shipping cost (0 if free).' }, 400);
+  }
   if (next === 'dispatched') {
     const mode = d.mode === 'hand' ? 'hand' : 'courier';
     const url = safeUrl(d.url);
@@ -185,7 +203,7 @@ export async function onRequestPatch({ request, env }) {
   rec.history = [...(rec.history || [{ s: 'pending', at: rec.createdAt }]), { s: next, at: new Date().toISOString() }];
 
   let email = null;
-  if (d.action !== 'back' && (next === 'dispatched' || next === 'delivered') && d.notify !== false) {
+  if (d.action !== 'back' && (next === 'processing' || next === 'dispatched' || next === 'delivered') && d.notify !== false) {
     email = await sendCustomerEmail(env, next, rec, site);
     rec.emails = { ...(rec.emails || {}), [next]: email };
   }

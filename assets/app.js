@@ -38,7 +38,7 @@ select.innerHTML = '<option value="" disabled selected>Choose...</option>';
 S.groups.forEach(g => {
   const og = document.createElement('optgroup');
   og.label = g.title;
-  S.categories.filter(c => c.group === g.id).forEach(c => og.append(new Option(c.name, c.name)));
+  S.categories.filter(c => c.group === g.id).forEach(c => { const pt = S.priceText(c); og.append(new Option(pt ? `${c.name} (${pt})` : c.name, c.name)); });
   if (og.children.length) select.append(og);
 });
 
@@ -59,6 +59,9 @@ function openViewer(cat, photos) {
   current = cat; curPhotos = photos;
   $('vTitle').textContent = `${cat.emoji} ${cat.name}`;
   $('vDesc').textContent = cat.desc;
+  const vp = S.priceText(cat);
+  $('vPrice').hidden = !vp;
+  $('vPrice').replaceChildren(...(vp ? [vp + ' ', el('small', '', 'each · final price confirmed on WhatsApp')] : []));
   vTrack.replaceChildren();
   if (photos.length) photos.forEach((p, i) => vTrack.append(img(p.src, `${cat.name} photo ${i + 1}`, cat.emoji, i === 0)));
   else vTrack.append(ph(cat.emoji));
@@ -115,12 +118,24 @@ $('countries').replaceChildren(...S.countries.map(c => new Option(c.n)));
 }
 form.country.addEventListener('input', () => { const c = findCountry(form.country.value); if (c) ccSel.value = c.c; });
 
+function updatePriceNote() {
+  const c = S.categories.find(x => x.name === select.value), note = $('priceNote');
+  const pt = c && S.priceText(c);
+  note.hidden = !pt;
+  if (!pt) return;
+  const q = Math.min(Math.max(parseInt(form.quantity.value, 10) || 1, 1), 100), lo = Number(c.price), hi = Number(c.priceMax) > lo ? Number(c.priceMax) : lo;
+  const n = x => (x * q).toLocaleString('en-IN'), cur = S.currency || '₹';
+  note.textContent = `Price: ${pt} each` + (q > 1 ? ` (about ${cur}${n(lo)}${hi > lo ? '–' + n(hi) : ''} for ${q})` : '') + '. Final price and shipping are confirmed on WhatsApp.';
+}
+select.addEventListener('change', updatePriceNote);
+form.quantity.addEventListener('input', updatePriceNote);
 function openOrder(productName, photoUrl) {
   refPhoto = photoUrl || ''; refFor = productName || '';
   $('oFormWrap').hidden = false; $('oDone').hidden = true;
   msg.className = ''; msg.textContent = ''; $('waFallback').replaceChildren();
   sendBtn.disabled = plainBtn.disabled = false;
   if (productName) select.value = productName;
+  updatePriceNote();
   openedAt = Date.now();
   if (!dlg.open) dlg.showModal();
   dlg.scrollTop = 0;
@@ -164,6 +179,7 @@ async function emailOrder(o) {
         order: `${o.quantity} x ${o.product}`,
         photo_customer_liked: o.photo || '(no specific photo chosen)',
         product_page: o.page || '-',
+        price_each: o.priceLabel || '-',
         colours_patterns: o.note || '-',
         name: o.name,
         mobile: `+${o.mobile}`,
@@ -184,6 +200,7 @@ function summary(d) {
   return [
     'Hi! I would like to place an order on Lil Things by Vaara.',
     `Item: ${d.quantity} x ${d.product}`,
+    d.priceLabel ? `Price: ${d.priceLabel} each (final price confirmed on WhatsApp)` : '',
     d.photo ? `Photo I liked: ${d.photo}` : (d.page ? `Product page: ${d.page}` : ''),
     d.note ? `Colours / patterns: ${d.note}` : '',
     `Name: ${d.name}`,
@@ -218,7 +235,7 @@ form.addEventListener('submit', async e => {
                   address: d.address, city: d.city, pin: d.pin, country: d.country, via, website: d.website, ms: Date.now() - openedAt };
   // reference: the photo they were viewing (only if they kept that product) and the product's own page
   const cat = S.categories.find(x => x.name === d.product);
-  if (cat) order.page = catShareUrl(cat);
+  if (cat) { order.page = catShareUrl(cat); order.priceLabel = S.priceText(cat); order.price = Number(cat.price) || 0; order.priceMax = Number(cat.priceMax) || 0; }
   if (refPhoto && refFor === d.product) order.photo = refPhoto;
   const waUrl = waLink(summary(order));
 
@@ -310,6 +327,8 @@ function initSlideshow() {
       pic.onclick = () => openViewer(c, photos);
       const body = el('div', 'body');
       body.append(el('h3', '', c.name), el('p', '', c.desc));
+      const pt = S.priceText(c);
+      if (pt) { const pr = el('div', 'price', pt); pr.append(el('small', '', ' each')); body.append(pr); }
       const btn = el('button', 'btn', 'Order now');
       btn.type = 'button';
       btn.onclick = () => openOrder(c.name);

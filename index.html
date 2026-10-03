@@ -132,7 +132,7 @@
 <!-- Photo gallery -->
 <dialog id="viewer" aria-label="Photo gallery">
   <button class="x" id="vClose" aria-label="Close">✕</button>
-  <div class="v-head"><h3 id="vTitle"></h3><p id="vDesc"></p></div>
+  <div class="v-head"><h3 id="vTitle"></h3><p id="vDesc"></p><p id="vPrice" class="vprice" hidden></p></div>
   <div class="v-wrap">
     <button class="nav-btn prev" id="vPrev" aria-label="Previous photo">‹</button>
     <div class="v-track" id="vTrack"></div>
@@ -161,6 +161,7 @@
           <input name="quantity" type="number" min="1" max="100" value="1" required inputmode="numeric">
         </label>
       </div>
+      <p id="priceNote" class="pnote" hidden></p>
       <label>Colours, patterns, size <small>same design as the photo, or your own idea</small>
         <textarea name="note" rows="3" maxlength="500" placeholder="e.g. same as the photo, or pink and white with small flowers"></textarea>
       </label>

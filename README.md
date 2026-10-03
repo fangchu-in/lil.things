@@ -8,7 +8,7 @@ The site rebuilds by itself in about a minute. Any number of photos per category
 
 | Folder | Shows as |
 |---|---|
-| `diya-holders`, `bracelets`, `scrunchies`, `wallets-pouches`, `headbands`, `bags`, `tote-bags`, `hair-clips`, `leaf-bookmarks`, `coasters`, `sunglass-covers`, `loom-bands`, `painted-bottles`, `painted-rocks` | Card cover (first photo) and swipe gallery (all photos) |
+| `diya-holders`, `bracelets`, `scrunchies`, `wallets-pouches`, `keychains`, `headbands`, `bags`, `tote-bags`, `hair-clips`, `leaf-bookmarks`, `coasters`, `sunglass-covers`, `loom-bands`, `painted-bottles`, `painted-rocks` | Card cover (first photo) and swipe gallery (all photos) |
 | `strip` | The slideshow in the big photo frame at the top of the page (best with 4 to 8 photos; shown in file-name order) |
 
 - Photos are ordered by file name. Name them `1.jpg`, `2.jpg`, `3.jpg`... The **first one is the cover**, so make it the best.
@@ -20,9 +20,9 @@ The site rebuilds by itself in about a minute. Any number of photos per category
 - Names, descriptions, WhatsApp number, making time, categories: `assets/config.js`
 - Vaara's story and "things I love": the `story` section of `index.html`
 
-### Add a category (e.g. bows)
-1. Open `assets/config.js`, find the two commented examples at the bottom of `categories`, remove the `//` at the start of one line and edit the words.
-2. Create the photo folder: GitHub → Add file → Create new file → type `images/bows/.gitkeep` → Commit. Then upload photos into it.
+### Add a category (e.g. earrings)
+1. Open `assets/config.js`, find the commented example at the bottom of `categories`, remove the `//` at the start of the line and edit the words (add `price: 120` if you want a price).
+2. Create the photo folder: GitHub → Add file → Create new file → type `images/earrings/.gitkeep` → Commit. Then upload photos into it.
 
 ## Sharing
 Each category has its own share link with a preview picture and description, for example
@@ -37,19 +37,25 @@ Each category has its own share link with a preview picture and description, for
 Customers can be from any country: they pick a country code (or type the full number starting with +).
 Spam protection: hidden trap field, minimum fill time, same-site check and a rate limit.
 
+## Prices
+Prices live in `assets/config.js`, one per category: `price: 150` or a range `price: 100, priceMax: 150` (rupees, per piece). They show on the cards, in the gallery, in the order form (with a running estimate for the quantity), in the WhatsApp message and in the emails, always with "final price confirmed on WhatsApp". Remove `price` from a category to hide its price.
+
 ## Order status and customer emails
-On `/orders.html` every order has a status: **Pending → Processing → Dispatched → Delivered**. Use the tabs at the top to see only one stage.
-- **Start making**: marks it Processing (no email).
-- **Dispatch…**: choose *Courier* (paste the tracking link, e.g. from trackcourier.io, and optionally the courier name) or *Hand delivery*, add an optional note, and the customer is emailed with a "Track your order" button.
-- **Mark delivered**: emails the customer a thank-you. Untick "Email the customer" in the pop-up if you don't want an email.
-- **Undo** moves an order back one step (no email). The customer also gets an automatic "we got your order" email when they order.
+On `/orders.html` every order has a status: **Pending → Processing → Dispatched → Delivered**. Tabs, a search box (name, order number, phone, product) and a **Download CSV** button are at the top.
+The customer gets up to four emails:
+1. **Order request received** (automatic when they order): "we got your interest, we will confirm details, price and shipping".
+2. **Order confirmed** (you send it): press **Confirm order…** after you have agreed the details with the customer on WhatsApp. Enter the items total and the shipping cost (0 if free), add an optional note (for example payment instructions) and the customer gets the final summary: item, quantity, colours, items total, shipping, total, address, phone and email.
+3. **Dispatched**: press **Dispatch…**, choose *Courier* (paste the tracking link, e.g. from trackcourier.io, and the courier name) or *Hand delivery*. The email has a "Track your order" button.
+4. **Delivered**: press **Mark delivered** for a thank-you email.
+- Each pop-up has an "Email the customer" tick you can untick. **Undo** moves an order back one step (no email).
+- You can change the items total and shipping on any order at any time (the **Save** button on the card). To tell the customer about a change, use **Resend email → Order confirmed**.
 - Copies of the emails to the customer also go to the addresses in `MAIL_CC` (default in `functions/_lib/mail.js`). Copies of new-order emails to you go to `notifyCc` in `assets/config.js`.
 
-### Order numbers, prices and paid
+### Order numbers, paid and resending
 - Every order gets a number (#1001, #1002, ...). Customers see it on the thank-you screen and in their emails.
-- **Total / Paid**: type the total for an order and press Save, then tick **Paid** when the money has arrived. The top of the page shows Billed, Paid and To collect.
-- **Prices**: give a category a price in `assets/config.js` (e.g. `price: 120`) and each order shows "Suggested: 2 × ₹120 = ₹240" with a **Use ₹240** button. The price is only a suggestion on this page; you can always type a different total.
-- **Resend email**: pick which email (received / dispatched / delivered) and the address to send to. If the customer's address was wrong, correct it there; the corrected address is saved on the order.
+- **Items / Shipping / Paid**: type the items total and shipping for an order and press Save, then tick **Paid** when the money has arrived. The top of the page shows Billed, Paid and To collect.
+- **Price list hint**: each order shows what the price list says (for example "2 × ₹100–150 = ₹200–300"), and for a single price a **Use ₹...** button. It is only a hint; you always set the final amount.
+- **Resend email**: pick which email (received / confirmed / dispatched / delivered) and the address to send to. If the customer's address was wrong, correct it there; the corrected address is saved on the order.
 
 ### Switch on customer emails (once, free)
 FormSubmit can only email you, so customer emails use Brevo (free: 300 emails a day).

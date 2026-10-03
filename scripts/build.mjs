@@ -127,7 +127,8 @@ for (const c of SITE.categories) {
   const url = `${SITE_URL}/share/${c.id}/`;
   const image = `${SITE_URL}/og/${haveOg.has(c.id) ? c.id : 'home'}.jpg`;
   const title = `${c.name} | ${SITE.brand}`;
-  const desc = `${c.desc} Made to order by Vaara, age 11.`;
+  const pt = SITE.priceText ? SITE.priceText(c) : '';
+  const desc = `${c.desc}${pt ? ` ${pt} each.` : ''} Made to order by Vaara, age 11.`;
   await writeFile(path.join(dir, 'index.html'), `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

@@ -33,20 +33,57 @@ const itemBlock = o => `<div style="background:#FFF3C4;border-radius:12px;paddin
   ${o.num ? `<span style="font-size:13px;color:#6b5f73">Order #${esc(o.num)}</span><br>` : ''}<b>${esc(o.quantity)} × ${esc(o.product)}</b>${o.note ? `<br><span style="font-size:14px">🎨 ${esc(o.note)}</span>` : ''}
   ${o.photo ? `<br><a href="${esc(o.photo)}" style="font-size:14px;color:#2E2433">The photo you liked</a>` : ''}</div>`;
 
+const rupee = n => '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+const unitText = o => Number(o.unitMin) > 0 ? (Number(o.unitMax) > Number(o.unitMin) ? `${rupee(o.unitMin)}–${Number(o.unitMax).toLocaleString('en-IN')}` : rupee(o.unitMin)) : '';
+const addr = o => `${o.address}, ${o.city} - ${o.pin}, ${o.country}`;
+
 export function buildEmail(kind, o, site) {
   const hi = `<p>Hi ${esc(first(o.name))},</p>`;
   const s = o.shipping || {};
+  const foot = `\n\n${BRAND}\nWhatsApp: https://wa.me/${WHATSAPP}`;
+
   if (kind === 'received') {
+    const unit = unitText(o);
     return {
-      subject: `${ref(o)}We got your order! ${o.quantity} x ${o.product}`,
-      html: shell('Thank you, we got your order! 🎉', `${hi}
-        <p>Vaara has received your request and will start making it soon. Everything is handmade, so please allow <b>${MAKING_TIME}</b>.</p>
+      subject: `${ref(o)}We got your order request! ${o.quantity} x ${o.product}`,
+      html: shell('Thank you, we got your request! 🎉', `${hi}
+        <p>Vaara has received your interest in this order. Everything is handmade and made to order, so we will contact you to confirm the final details, price and shipping.</p>
         ${itemBlock(o)}
-        <p style="font-size:14px"><b>Delivery to:</b><br>${esc(o.name)}<br>${esc(o.address)}, ${esc(o.city)} - ${esc(o.pin)}, ${esc(o.country)}</p>
-        <p>We will message you if we need to confirm any colours or patterns, and we will email you again when it is on its way.</p>`, site),
-      text: `Hi ${first(o.name)},\n\nVaara has received your order${o.num ? ' #' + o.num : ''}: ${o.quantity} x ${o.product}${o.note ? ` (${o.note})` : ''}.\nEverything is handmade, so please allow ${MAKING_TIME}.\n\nDelivery to: ${o.name}, ${o.address}, ${o.city} - ${o.pin}, ${o.country}\n\nWe will email you again when it is on its way.\n\n${BRAND}\nWhatsApp: https://wa.me/${WHATSAPP}`,
+        ${unit ? `<p style="font-size:14px">Price: <b>${esc(unit)} each</b>. The final price and shipping are confirmed on WhatsApp before we start.</p>` : ''}
+        <p style="font-size:14px"><b>Delivery to:</b><br>${esc(o.name)}<br>${esc(addr(o))}</p>
+        <p>Once everything is agreed you will get another email with the final order details. Making time is ${MAKING_TIME} depending on the item.</p>`, site),
+      text: `Hi ${first(o.name)},\n\nVaara has received your interest in this order${o.num ? ' #' + o.num : ''}: ${o.quantity} x ${o.product}${o.note ? ` (${o.note})` : ''}.\n${unit ? `Price: ${unit} each. Final price and shipping are confirmed on WhatsApp.\n` : ''}\nDelivery to: ${o.name}, ${addr(o)}\n\nWe will contact you to confirm the final details. Once agreed you will get another email with the final order details.${foot}`,
     };
   }
+
+  if (kind === 'processing') {
+    const items = Number(o.amount) || 0, ship = Number(o.shipCost) || 0;
+    const rows = [
+      ['Order', o.num ? `#${o.num}` : ''],
+      ['Item', `${o.quantity} × ${o.product}`],
+      ['Colours / patterns', o.note || '-'],
+      ['Items total', rupee(items)],
+      ['Shipping', ship > 0 ? rupee(ship) : 'Free'],
+      ['Total', rupee(items + ship)],
+      ['Deliver to', `${o.name}, ${addr(o)}`],
+      ['Phone', `+${o.mobile}`],
+      ['Email', o.email],
+    ].filter(r => r[1]);
+    const table = `<table style="width:100%;border-collapse:collapse;font-size:15px;margin:12px 0">${rows.map(([k, v], i) => {
+      const total = k === 'Total';
+      return `<tr style="${total ? 'background:#FFF3C4;font-weight:bold;font-size:17px' : ''}"><td style="padding:8px 10px;border-bottom:1px solid #eadfcf;color:#6b5f73;width:38%;vertical-align:top">${esc(k)}</td><td style="padding:8px 10px;border-bottom:1px solid #eadfcf">${esc(v)}</td></tr>`;
+    }).join('')}</table>`;
+    return {
+      subject: `${ref(o)}Your order is confirmed: ${o.quantity} x ${o.product}`,
+      html: shell('Your order is confirmed! 🧶', `${hi}
+        <p>Thank you for confirming the details with us. Vaara is starting on your order now. Here is the final summary:</p>
+        ${table}
+        ${o.confirmNote ? `<p style="background:#F1E8FF;border-radius:12px;padding:10px 14px">${esc(o.confirmNote)}</p>` : ''}
+        <p>Making takes ${MAKING_TIME} depending on the item. We will email you again with the courier details when it is dispatched. If anything here looks wrong, please reply or message us on WhatsApp.</p>`, site),
+      text: `Hi ${first(o.name)},\n\nYour order is confirmed. Final summary:\n\n${rows.map(([k, v]) => `${k}: ${v}`).join('\n')}\n${o.confirmNote ? `\n${o.confirmNote}\n` : ''}\nMaking takes ${MAKING_TIME}. We will email you when it is dispatched. If anything looks wrong, reply to this email or message us on WhatsApp.${foot}`,
+    };
+  }
+
   if (kind === 'dispatched') {
     const hand = s.mode === 'hand';
     const link = safeUrl(s.url);
@@ -57,10 +94,12 @@ export function buildEmail(kind, o, site) {
          <p style="font-size:13px;color:#6b5f73">Or copy this link: ${esc(link)}</p>` : ''}`;
     return {
       subject: `${ref(o)}${hand ? 'Your order is on its way (hand delivery)' : 'Your order has been dispatched!'}`,
-      html: shell(hand ? 'Your order is on its way! 🚲' : 'Your order has been dispatched! 📦', `${hi}${how}${itemBlock(o)}`, site),
-      text: `Hi ${first(o.name)},\n\n${hand ? `Your order will be hand delivered.${s.note ? ' ' + s.note : ''}` : `Your order has been dispatched${s.courier ? ' with ' + s.courier : ''}.${s.note ? ' ' + s.note : ''}${link ? '\nTrack it here: ' + link : ''}`}\n\n${o.quantity} x ${o.product}\n\n${BRAND}\nWhatsApp: https://wa.me/${WHATSAPP}`,
+      html: shell(hand ? 'Your order is on its way! 🚲' : 'Your order has been dispatched! 📦', `${hi}${how}${itemBlock(o)}
+        <p style="font-size:14px"><b>Delivery to:</b><br>${esc(o.name)}<br>${esc(addr(o))}</p>`, site),
+      text: `Hi ${first(o.name)},\n\n${hand ? `Your order will be hand delivered.${s.note ? ' ' + s.note : ''}` : `Your order has been dispatched${s.courier ? ' with ' + s.courier : ''}.${s.note ? ' ' + s.note : ''}${link ? '\nTrack it here: ' + link : ''}`}\n\n${o.quantity} x ${o.product}\nDelivery to: ${o.name}, ${addr(o)}${foot}`,
     };
   }
+
   return { // delivered
     subject: `${ref(o)}Delivered! Hope you love it`,
     html: shell('Your order has been delivered! 🎁', `${hi}

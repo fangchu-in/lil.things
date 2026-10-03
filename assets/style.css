@@ -212,3 +212,10 @@ input:focus,select:focus,textarea:focus{outline:none;box-shadow:0 0 0 4px rgba(2
 .linkbtn{background:none;border:0;color:var(--ink);font:700 .95rem 'Nunito',sans-serif;text-decoration:underline;cursor:pointer;padding:.3rem;text-align:center}
 .linkbtn[disabled]{opacity:.5;pointer-events:none}
 @media(max-width:380px){.phone{grid-template-columns:1fr}}
+
+/* prices */
+.card .price{font-weight:800;font-size:1.05rem;margin-top:.1rem}
+.card .price small{font-weight:700;opacity:.65;font-size:.8rem}
+.v-head .vprice{font-weight:800;opacity:1;margin-top:.25rem}
+.v-head .vprice small{font-weight:700;opacity:.7}
+.pnote{margin:0;background:#FFF3C4;border-radius:12px;padding:.45rem .8rem;font-size:.92rem;font-weight:700}

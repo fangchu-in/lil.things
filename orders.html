@@ -49,6 +49,10 @@
   .pay .paidl{display:flex;gap:.35rem;align-items:center;font-weight:800;cursor:pointer}
   .pay .paidl input{flex:none;width:1.2rem;height:1.2rem;accent-color:#1e8e5a}
   .pay small{flex-basis:100%;opacity:.7}
+  .pay .tot{flex-basis:100%;font-weight:800}
+  #q{width:100%;flex:none;margin:.1rem 0 .6rem}
+  #sdlg input[type=number]{width:100%}
+  #sTotal{font-weight:800;background:#FFF3C4;border-radius:10px;padding:.4rem .7rem;margin:.6rem 0 0}
   #money{font-weight:700;margin:.1rem 0 .5rem}
   dialog#sdlg,dialog#rdlg{border:3px solid var(--ink);border-radius:18px;padding:1.1rem;width:min(94vw,460px);background:#fff}
   dialog#rdlg::backdrop{background:rgba(46,36,51,.6)}
@@ -78,10 +82,18 @@
 <p id="msg"></p>
 <p id="count" style="margin-bottom:.2rem"></p>
 <p id="money" hidden></p>
+<input id="q" type="search" placeholder="Search by name, order number, phone, product..." hidden>
 <div class="chips" id="chips" hidden></div>
 <div id="list"></div>
 <dialog id="sdlg"><form method="dialog" id="sform" style="display:block" novalidate>
   <h2 id="sTitle"></h2>
+  <div id="sMoney">
+    <label for="sAmt">Items total (₹)</label>
+    <input id="sAmt" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 600">
+    <label for="sShipC">Shipping (₹, type 0 if free)</label>
+    <input id="sShipC" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 60">
+    <p id="sTotal"></p>
+  </div>
   <div id="sShip">
     <div class="opt"><label><input type="radio" name="mode" value="courier" checked> 📦 Courier</label><label><input type="radio" name="mode" value="hand"> 🤝 Hand delivery</label></div>
     <div id="sCourier">
@@ -101,7 +113,7 @@
 <dialog id="rdlg"><form method="dialog" id="rform" style="display:block" novalidate>
   <h2>Resend an email</h2>
   <label for="rKind">Which email?</label>
-  <select id="rKind"><option value="received">Order received</option><option value="dispatched">Dispatched (with courier details)</option><option value="delivered">Delivered</option></select>
+  <select id="rKind"><option value="received">Order received (interested)</option><option value="processing">Order confirmed (final details, price, shipping)</option><option value="dispatched">Dispatched (with courier details)</option><option value="delivered">Delivered</option></select>
   <label for="rEmail">Send to</label>
   <input id="rEmail" type="text" inputmode="email" autocomplete="off">
   <small>If the address was wrong, fix it here. The corrected address is saved on the order.</small>
@@ -135,26 +147,40 @@ function render(){
   for (const k in STAT) counts[k] = orders.filter(o => st(o) === k).length;
   $('chips').hidden = !orders.length;
   $('chips').innerHTML = [['all', 'All'], ...Object.entries(STAT)].map(([k, n]) =>
-    `<button type="button" class="chip${filter === k ? ' on' : ''}" data-f="${k}">${n} (${counts[k]})</button>`).join('');
-  const list = filter === 'all' ? orders : orders.filter(o => st(o) === filter);
-  const billed = orders.reduce((n, o) => n + (o.amount || 0), 0), got = orders.reduce((n, o) => n + (o.paid ? (o.amount || 0) : 0), 0);
+    `<button type="button" class="chip${filter === k ? ' on' : ''}" data-f="${k}">${n} (${counts[k]})</button>`).join('') + '<button type="button" class="chip" data-f="__csv">⬇ Download CSV</button>';
+  const q = $('q').value.trim().toLowerCase().replace(/^#/, '');
+  $('q').hidden = !orders.length;
+  const list = orders.filter(o => (filter === 'all' || st(o) === filter) &&
+    (!q || [o.num, o.name, o.mobile, o.email, o.product, o.city, o.note].join(' ').toLowerCase().includes(q)));
+  const billed = orders.reduce((n, o) => n + grand(o), 0), got = orders.reduce((n, o) => n + (o.paid ? grand(o) : 0), 0);
   $('money').hidden = !billed;
   $('money').textContent = billed ? `💰 Billed ${money(billed)} · Paid ${money(got)} · To collect ${money(billed - got)}` : '';
   $('count').textContent = orders.length ? list.length + (list.length === 1 ? ' order' : ' orders') : '';
   $('list').innerHTML = list.length ? list.map(card).join('') : `<p>${orders.length ? 'Nothing here.' : 'No orders yet.'}</p>`;
 }
+// price per piece: what the customer saw when ordering, else today's price list
+function unitOf(o){
+  if (o.unitMin) return { min: o.unitMin, max: o.unitMax || o.unitMin };
+  const c = window.SITE && SITE.categories.find(x => x.name === o.product);
+  return c && Number(c.price) > 0 ? { min: Number(c.price), max: Number(c.priceMax) > Number(c.price) ? Number(c.priceMax) : Number(c.price) } : null;
+}
+const itemsOf = o => o.amount || 0, grand = o => (o.amount || 0) + (o.shipCost || 0);
 function payBlock(o){
-  const u = unitPrice(o), sug = u ? u * o.quantity : 0;
-  return `<div class="pay"><span>💰 Total ${esc(CUR)}<input class="amt" type="number" min="0" step="any" inputmode="decimal" value="${o.amount ?? ''}" placeholder="${sug || ''}" aria-label="Order total"></span>
+  const u = unitOf(o), single = u && u.min === u.max;
+  const sug = u ? `${o.quantity} × ${money(u.min)}${single ? '' : '–' + (u.max).toLocaleString('en-IN')} = ${money(u.min * o.quantity)}${single ? '' : '–' + (u.max * o.quantity).toLocaleString('en-IN')}` : '';
+  return `<div class="pay">
+    <span>Items ${esc(CUR)}<input class="amt" type="number" min="0" step="any" inputmode="decimal" value="${o.amount ?? ''}" placeholder="${single ? u.min * o.quantity : ''}" aria-label="Items total"></span>
+    <span>Shipping ${esc(CUR)}<input class="shp" type="number" min="0" step="any" inputmode="decimal" value="${o.shipCost ?? ''}" placeholder="0" aria-label="Shipping cost"></span>
     <button type="button" data-a="amount">Save</button>
-    ${sug && o.amount == null ? `<button type="button" data-a="useSug" data-v="${sug}">Use ${esc(money(sug))}</button>` : ''}
+    ${single && o.amount == null ? `<button type="button" data-a="useSug" data-v="${u.min * o.quantity}">Use ${esc(money(u.min * o.quantity))}</button>` : ''}
     <label class="paidl"><input type="checkbox" class="paid"${o.paid ? ' checked' : ''}> Paid</label>
-    ${sug ? `<small>Suggested: ${esc(o.quantity)} × ${esc(money(u))} = ${esc(money(sug))}</small>` : ''}</div>`;
+    ${o.amount != null ? `<span class="tot">Total: ${esc(money(grand(o)))}${o.shipCost ? ` (items ${esc(money(o.amount))} + shipping ${esc(money(o.shipCost))})` : ''}</span>` : ''}
+    ${sug ? `<small>Price list: ${esc(sug)}${single ? '' : ' (range, type the final total)'}</small>` : ''}</div>`;
 }
 function card(o){
   const s = st(o), sh = o.shipping, em = o.emails || {};
   const act = {
-    pending: `<button type="button" class="go" data-a="processing">Start making</button><button type="button" class="sub" data-a="dispatched">Dispatch…</button>`,
+    pending: `<button type="button" class="go" data-a="processing">Confirm order…</button>`,
     processing: `<button type="button" class="go" data-a="dispatched">Dispatch…</button>`,
     dispatched: `<button type="button" class="go" data-a="delivered">Mark delivered</button>`,
     delivered: '',
@@ -204,24 +230,44 @@ sform.onsubmit = async e => {
   e.preventDefault();
   const { id, action } = pendingChange;
   $('sErr').textContent = ''; $('sOk').disabled = true;
-  const body = { action, notify: $('sNotify').checked, note: $('sNote').value.trim() };
+  const notify = $('sNotify').checked;
+  const body = { action, notify, note: $('sNote').value.trim() };
+  if (action === 'processing') {
+    const amt = $('sAmt').value.trim(), shp = $('sShipC').value.trim();
+    if (notify && (amt === '' || shp === '')) { $('sErr').textContent = 'Please enter the items total and the shipping cost (0 if free).'; $('sOk').disabled = false; return; }
+    Object.assign(body, { amount: amt, shipCost: shp });
+  }
   if (action === 'dispatched') Object.assign(body, { mode: sform.mode.value, url: $('sUrl').value.trim(), courier: $('sCo').value.trim() });
   const j = await change(id, body);
   $('sOk').disabled = false;
   if (j.err) { $('sErr').textContent = j.err; return; }
   sdlg.close(); toast(j); load();
 };
+function showTotal(){
+  $('sErr').textContent = '';
+  const a = parseFloat($('sAmt').value), h = parseFloat($('sShipC').value);
+  $('sTotal').textContent = isFinite(a) ? `Total for the customer: ${money(a + (isFinite(h) ? h : 0))}` : '';
+}
+$('sAmt').oninput = $('sShipC').oninput = showTotal;
 function openStatus(id, action){
   const o = orders.find(x => x.id === id); if (!o) return;
   pendingChange = { id, action };
-  const disp = action === 'dispatched';
-  $('sTitle').textContent = disp ? `Dispatch: ${o.quantity} × ${o.product}` : `Delivered: ${o.quantity} × ${o.product}`;
+  const proc = action === 'processing', disp = action === 'dispatched';
+  const label = `#${o.num || ''} ${o.quantity} × ${o.product}`.trim();
+  $('sTitle').textContent = proc ? `Confirm order ${label}` : disp ? `Dispatch ${label}` : `Delivered ${label}`;
+  $('sMoney').hidden = !proc;
   $('sShip').hidden = !disp;
   $('sCourier').hidden = false; sform.mode.value = 'courier';
-  $('sUrl').value = ''; $('sCo').value = ''; $('sNote').value = ''; $('sErr').textContent = '';
-  $('sNote').placeholder = disp ? 'e.g. Parcel left today, usually 3-5 days' : 'e.g. Handed over at the flea market';
+  $('sUrl').value = ''; $('sCo').value = ''; $('sNote').value = o.confirmNote && proc ? o.confirmNote : ''; $('sErr').textContent = '';
+  if (proc) {
+    const u = unitOf(o);
+    $('sAmt').value = o.amount ?? (u && u.min === u.max ? u.min * o.quantity : '');
+    $('sShipC').value = o.shipCost ?? '';
+    showTotal();
+  }
+  $('sNote').placeholder = proc ? 'e.g. Please pay by UPI to ... before we start' : disp ? 'e.g. Parcel left today, usually 3-5 days' : 'e.g. Handed over at the flea market';
   $('sNotify').checked = true;
-  $('sOk').textContent = disp ? 'Mark dispatched' : 'Mark delivered';
+  $('sOk').textContent = proc ? 'Confirm and email customer' : disp ? 'Mark dispatched' : 'Mark delivered';
   sdlg.showModal();
 }
 $('list').addEventListener('change', async e => {
@@ -237,7 +283,7 @@ function openResend(id){
   const o = orders.find(x => x.id === id); if (!o) return;
   resendId = id;
   const s = st(o);
-  $('rKind').value = s === 'delivered' ? 'delivered' : s === 'dispatched' ? 'dispatched' : 'received';
+  $('rKind').value = { processing: 'processing', dispatched: 'dispatched', delivered: 'delivered' }[s] || 'received';
   $('rEmail').value = o.email; $('rErr').textContent = ''; $('rOk').disabled = false;
   rdlg.showModal();
 }
@@ -250,7 +296,20 @@ $('rform').onsubmit = async e => {
   if (j.err) { $('rErr').textContent = j.err; return; }
   rdlg.close(); toast(j); load();
 };
-$('chips').onclick = e => { const b = e.target.closest('.chip'); if (b) { filter = b.dataset.f; render(); } };
+$('chips').onclick = e => { const b = e.target.closest('.chip'); if (!b) return; if (b.dataset.f === '__csv') return exportCsv(); filter = b.dataset.f; render(); };
+$('q').oninput = render;
+function exportCsv(){
+  const cols = ['Order no', 'Date', 'Status', 'Product', 'Quantity', 'Colours / patterns', 'Name', 'Mobile', 'Email', 'Address', 'City', 'Pin', 'Country', 'Items total', 'Shipping cost', 'Total', 'Paid', 'Delivery', 'Courier', 'Tracking link'];
+  const cell = v => { if (v && v.phone) return '"=""' + v.phone.replace(/\D/g, '').replace(/^/, '+') + '"""';   // digits only, shown as text in Excel/Sheets
+    v = String(v ?? ''); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };   // quotes, and no formulas from customer text
+  const rows = orders.slice().sort((a, b) => (a.num || 0) - (b.num || 0)).map(o => [o.num, new Date(o.createdAt).toLocaleString(), STAT[st(o)], o.product, o.quantity, o.note, o.name, { phone: '+' + num(o) }, o.email, o.address, o.city, o.pin, o.country,
+    o.amount ?? '', o.shipCost ?? '', o.amount != null ? grand(o) : '', o.paid ? 'yes' : 'no', o.shipping ? (o.shipping.mode === 'hand' ? 'hand delivery' : 'courier') : '', o.shipping && o.shipping.courier, o.shipping && o.shipping.url]);
+  const csv = '\ufeff' + [cols, ...rows].map(r => r.map(cell).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `lil-things-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.append(a); a.click(); a.remove();
+}
 
 const pop = $('pop');
 $('popClose').onclick = () => pop.close();
@@ -272,14 +331,15 @@ $('list').onclick = async e => {
   if (g) {
     const id = g.closest('.o').dataset.id, a = g.dataset.a;
     if (a === 'amount' || a === 'useSug') {
-      const v = a === 'useSug' ? g.dataset.v : g.closest('.pay').querySelector('.amt').value.trim();
+      const pay = g.closest('.pay');
+      const body = a === 'useSug' ? { amount: g.dataset.v } : { amount: pay.querySelector('.amt').value.trim(), shipCost: pay.querySelector('.shp').value.trim() };
       g.disabled = true;
-      const j = await change(id, { action: 'set', amount: v });
+      const j = await change(id, { action: 'set', ...body });
       if (j.err) { g.disabled = false; return flash(j.err); }
-      flash('Total saved.', true); return load();
+      flash('Saved.', true); return load();
     }
     if (a === 'resend') return openResend(id);
-    if (a === 'dispatched' || a === 'delivered') return openStatus(id, a);
+    if (a === 'processing' || a === 'dispatched' || a === 'delivered') return openStatus(id, a);
     if (a === 'back' && !confirm('Move this order back one step? (No email is sent.)')) return;
     g.disabled = true;
     const j = await change(id, { action: a });
